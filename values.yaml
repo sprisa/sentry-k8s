@@ -1,8 +1,9 @@
 ## sentry-k8s values
 ##
-## Profiles: set `sentry.profile` to `errors-only` (default, lightweight) or
-## `feature-complete` (full parity with Sentry self-hosted docker-compose).
-## Every component also has its own `enabled` flag to build intermediate sets.
+## every component is gated by its own `enabled` flag.
+## The defaults below are the lightweight errors-only set; the examples/ files
+## are presets (errors-only / errors+transactions / feature-complete) that flip
+## those flags. See README "Presets".
 ##
 ## This chart uses NO Helm lifecycle hooks; initialization is a plain Job.
 ## That makes it safe to deploy with Pulumi (k8s.helm.v3.Chart) and Terraform.
@@ -101,8 +102,14 @@ bootstrap:
 # Sentry (core + workers)
 # -----------------------------------------------------------------------------
 sentry:
-  # errors-only | feature-complete
-  profile: errors-only
+  # Each component is gated by its own
+  # `enabled` flag below; the files in examples/ are ready-made presets
+  # (errors-only / errors+transactions / feature-complete) that toggle them.
+  #
+  # Sets Sentry's SENTRY_SELF_HOSTED_ERRORS_ONLY. true hides the performance/
+  # transactions/replays/etc. product surfaces (pairs with the lightweight,
+  # errors-only component set). Set false once you enable those pipelines.
+  selfHostedErrorsOnly: true
   eventRetentionDays: 90
 
   system:
@@ -177,11 +184,11 @@ sentry:
     resources: {}
     nodeSelector: {}
 
-  # --- errors-only ingest/consumers (always on under errors-only) ---
-  ingestEvents: {}
-  ingestAttachments: {}
-  postProcessForwarderErrors: {}
-  subscriptionConsumerEvents: {}
+  # --- base error-tracking ingest/consumers (on by default) ---
+  ingestEvents: { enabled: true }
+  ingestAttachments: { enabled: true }
+  postProcessForwarderErrors: { enabled: true }
+  subscriptionConsumerEvents: { enabled: true }
 
   cleanup:
     enabled: true
@@ -189,27 +196,28 @@ sentry:
     resources: {}
     nodeSelector: {}
 
-  # --- feature-complete consumers (on when profile=feature-complete or enabled:true) ---
-  transactions: {}
-  metrics: {}
-  genericMetrics: {}
-  billingMetrics: {}
-  ingestReplayRecordings: {}
-  ingestOccurrences: {}
-  ingestProfiles: {}
-  ingestMonitors: {}
-  ingestFeedback: {}
-  processSpans: {}
-  processSegments: {}
-  monitorsClockTick: {}
-  monitorsClockTasks: {}
-  uptimeResults: {}
-  postProcessForwarderTransactions: {}
-  postProcessForwarderIssuePlatform: {}
-  subscriptionConsumerTransactions: {}
-  subscriptionConsumerMetrics: {}
-  subscriptionConsumerGenericMetrics: {}
-  subscriptionConsumerEapItems: {}
+  # --- transactions / metrics / replays / profiling / monitors / uptime / spans
+  # consumers (off by default; flip enabled:true, see examples/). ---
+  transactions: { enabled: false }
+  metrics: { enabled: false }
+  genericMetrics: { enabled: false }
+  billingMetrics: { enabled: false }
+  ingestReplayRecordings: { enabled: false }
+  ingestOccurrences: { enabled: false }
+  ingestProfiles: { enabled: false }
+  ingestMonitors: { enabled: false }
+  ingestFeedback: { enabled: false }
+  processSpans: { enabled: false }
+  processSegments: { enabled: false }
+  monitorsClockTick: { enabled: false }
+  monitorsClockTasks: { enabled: false }
+  uptimeResults: { enabled: false }
+  postProcessForwarderTransactions: { enabled: false }
+  postProcessForwarderIssuePlatform: { enabled: false }
+  subscriptionConsumerTransactions: { enabled: false }
+  subscriptionConsumerMetrics: { enabled: false }
+  subscriptionConsumerGenericMetrics: { enabled: false }
+  subscriptionConsumerEapItems: { enabled: false }
 
 # -----------------------------------------------------------------------------
 # Snuba
@@ -239,34 +247,34 @@ snuba:
       maxReplicas: 5
       targetCPUUtilizationPercentage: 75
 
-  # --- errors-only ---
-  consumer: {}
-  outcomesConsumer: {}
-  outcomesBillingConsumer: {}
-  replacer: {}
-  groupAttributesConsumer: {}
-  subscriptionConsumerEvents: {}
+  # --- base error-tracking (on by default) ---
+  consumer: { enabled: true }
+  outcomesConsumer: { enabled: true }
+  outcomesBillingConsumer: { enabled: true }
+  replacer: { enabled: true }
+  groupAttributesConsumer: { enabled: true }
+  subscriptionConsumerEvents: { enabled: true }
 
-  # --- feature-complete ---
-  transactionsConsumer: {}
-  replaysConsumer: {}
-  issueOccurrenceConsumer: {}
-  metricsConsumer: {}
-  genericMetricsSetsConsumer: {}
-  genericMetricsCountersConsumer: {}
-  genericMetricsDistributionsConsumer: {}
-  genericMetricsGaugesConsumer: {}
-  profilingProfilesConsumer: {}
-  profilingFunctionsConsumer: {}
-  profilingChunksConsumer: {}
-  eapItemsConsumer: {}
-  subscriptionConsumerTransactions: {}
-  subscriptionConsumerMetrics: {}
-  subscriptionConsumerGenericMetricsSets: {}
-  subscriptionConsumerGenericMetricsCounters: {}
-  subscriptionConsumerGenericMetricsDistributions: {}
-  subscriptionConsumerGenericMetricsGauges: {}
-  subscriptionConsumerEapItems: {}
+  # --- transactions / replays / metrics / profiling / EAP (off by default) ---
+  transactionsConsumer: { enabled: false }
+  replaysConsumer: { enabled: false }
+  issueOccurrenceConsumer: { enabled: false }
+  metricsConsumer: { enabled: false }
+  genericMetricsSetsConsumer: { enabled: false }
+  genericMetricsCountersConsumer: { enabled: false }
+  genericMetricsDistributionsConsumer: { enabled: false }
+  genericMetricsGaugesConsumer: { enabled: false }
+  profilingProfilesConsumer: { enabled: false }
+  profilingFunctionsConsumer: { enabled: false }
+  profilingChunksConsumer: { enabled: false }
+  eapItemsConsumer: { enabled: false }
+  subscriptionConsumerTransactions: { enabled: false }
+  subscriptionConsumerMetrics: { enabled: false }
+  subscriptionConsumerGenericMetricsSets: { enabled: false }
+  subscriptionConsumerGenericMetricsCounters: { enabled: false }
+  subscriptionConsumerGenericMetricsDistributions: { enabled: false }
+  subscriptionConsumerGenericMetricsGauges: { enabled: false }
+  subscriptionConsumerEapItems: { enabled: false }
 
 # -----------------------------------------------------------------------------
 # Relay (always on; ingest edge)
@@ -291,7 +299,7 @@ relay:
     targetCPUUtilizationPercentage: 75
 
 # -----------------------------------------------------------------------------
-# Symbolicator (opt-in even in feature-complete)
+# Symbolicator (native stacktrace symbolication; opt-in)
 # -----------------------------------------------------------------------------
 symbolicator:
   enabled: false
@@ -307,7 +315,7 @@ symbolicator:
     storageClass: ""
 
 # -----------------------------------------------------------------------------
-# vroom / uptimeChecker / launchpad (feature-complete)
+# vroom (profiling) / uptimeChecker / launchpad (opt-in)
 # -----------------------------------------------------------------------------
 vroom:
   enabled: false

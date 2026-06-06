@@ -1,13 +1,18 @@
 # Errors-only: the lightweight default. Web, relay, Snuba (errors/outcomes),
 # taskbroker, ingest-events/attachments, cleanup. No transactions, replays,
 # metrics, or profiling. Good for a single node.
+#
+# This matches the chart defaults, so the only thing you strictly need to set is
+# sentry.system.url. Every component is gated by its own `enabled` flag; this
+# preset just leaves the transaction/replay/metrics/profiling ones off.
 
 global:
   # Propagated to ClickHouse PVCs and the Bitnami Postgres/Redis/Kafka subcharts.
   storageClass: longhorn
 
 sentry:
-  profile: errors-only          # errors-only | feature-complete
+  # Hides the performance/replays/etc. product surfaces (default).
+  selfHostedErrorsOnly: true
   system:
     # Public URL users hit (TLS terminates upstream at your proxy).
     # Drives system.url-prefix + CSRF_TRUSTED_ORIGINS; X-Forwarded-Proto is trusted.

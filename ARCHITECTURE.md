@@ -156,17 +156,21 @@ hook weights:
   the schema — this is the documented trade-off for being hook-free (and thus
   Pulumi/Terraform-friendly).
 
-## Profiles
+## Component gating (presets)
 
-`sentry.profile` selects the default `enabled` state of each component:
+Each component is switched independently by its
+own `enabled` flag, and the [`examples/`](./examples) files are presets that set
+those flags. The chart defaults are the errors-only set:
 
 - **errors-only** (default): web, relay, snuba-api + errors/outcomes/replacer/
   group-attributes/events-subscription consumers, taskbroker/scheduler/worker,
   ingest-events/attachments, post-process-forwarder-errors,
   subscription-consumer-events, cleanup.
-- **feature-complete**: everything above plus transactions, replays, metrics,
-  generic-metrics, profiling, EAP, monitors, uptime, spans/segments, launchpad,
-  vroom (symbolicator stays opt-in).
+- **feature-complete** (example): everything above plus transactions, replays,
+  metrics, generic-metrics, profiling, EAP, monitors, uptime, spans/segments,
+  launchpad, vroom (symbolicator stays opt-in).
 
-Every component also has its own `enabled` flag, so you can build intermediate
-sets (e.g. errors + transactions) without switching the whole profile.
+Because gating is per-component you can build any intermediate set (e.g. errors +
+transactions). Separately, `sentry.selfHostedErrorsOnly` (Sentry's
+`SENTRY_SELF_HOSTED_ERRORS_ONLY`) controls whether the performance/replays/etc.
+product surfaces are shown — set it `false` when you enable those pipelines.

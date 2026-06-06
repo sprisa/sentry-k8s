@@ -5,16 +5,15 @@ forwarders, schedulers). Keeps the ~40 consumer templates DRY.
 Input dict:
   root           : $ (top context)
   name           : short component name, e.g. "events-consumer"
-  component      : the values map for this component (supports <common> fields)
+  component      : the values map for this component (gated by its .enabled flag)
   imageKey       : "sentry" | "snuba"
-  tier           : "errors-only" | "feature-complete"
   command        : list of args passed to the image entrypoint
   healthcheckFile: bool, use the /tmp/health.txt liveness probe
 */}}
 {{- define "sentry.workload" -}}
 {{- $root := .root -}}
 {{- $c := .component -}}
-{{- $enabled := include "sentry.enabled" (dict "root" $root "component" $c "tier" .tier) -}}
+{{- $enabled := include "sentry.enabled" (dict "component" $c) -}}
 {{- if eq $enabled "true" -}}
 {{- $fullname := include "sentry.fullname" $root -}}
 {{- $compName := printf "%s-%s" $fullname .name -}}

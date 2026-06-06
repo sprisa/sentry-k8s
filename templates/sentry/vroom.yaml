@@ -1,6 +1,6 @@
 {{- $fullname := include "sentry.fullname" . }}
 {{- $c := .Values.vroom }}
-{{- $enabled := include "sentry.enabled" (dict "root" . "component" $c "tier" "feature-complete") }}
+{{- $enabled := include "sentry.enabled" (dict "component" $c) }}
 {{- if eq $enabled "true" }}
 {{- $sc := $c.persistence.storageClass | default .Values.global.storageClass }}
 {{- $profilesS3 := eq .Values.filestore.profiles.backend "s3" }}

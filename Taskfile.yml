@@ -44,7 +44,7 @@ tasks:
       - helm lint .
 
   template:
-    desc: 'Render one profile (EXAMPLE=errors-only|errors-transactions|feature-complete)'
+    desc: 'Render one example preset (EXAMPLE=errors-only|errors-transactions|feature-complete)'
     deps: [deps]
     vars:
       EXAMPLE: '{{.EXAMPLE | default "errors-only"}}'
@@ -52,7 +52,7 @@ tasks:
       - helm template {{.CHART}} . -n {{.NAMESPACE}} -f examples/values-{{.EXAMPLE}}.yaml
 
   test-render:
-    desc: Render every example profile to confirm they all template cleanly
+    desc: Render every example preset to confirm they all template cleanly
     deps: [deps]
     cmds:
       - for: ["errors-only", "errors-transactions", "feature-complete"]

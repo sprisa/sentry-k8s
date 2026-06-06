@@ -71,28 +71,30 @@ kubectl -n sentry port-forward svc/sentry-nginx 8080:80
 Point your own Ingress / Contour `HTTPProxy` / load balancer at the
 `sentry-nginx` Service (port 80).
 
-## Profile presets
+## Presets (example values)
 
-`sentry.profile` sets the default `enabled` state for every component. Each
-component also has its own `enabled` flag, so you can build intermediate sets.
+Every component is gated by its own
+`enabled` flag, and the files in [`examples/`](./examples) are ready-made presets
+that toggle those flags for you. The chart defaults are the errors-only set.
 
-| Preset | `sentry.profile` | What runs | Example values |
-| --- | --- | --- | --- |
-| **Errors only** (default, lightweight) | `errors-only` | Error tracking: web, relay, snuba errors/outcomes, taskbroker, ingest-events/attachments, cleanup | [`examples/values-errors-only.yaml`](./examples/values-errors-only.yaml) |
-| **Errors + transactions** | `errors-only` + toggles | Adds the performance/tracing pipeline | [`examples/values-errors-transactions.yaml`](./examples/values-errors-transactions.yaml) |
-| **Feature complete** | `feature-complete` | Full parity: replays, metrics, profiling, EAP, monitors, uptime, spans, launchpad, vroom | [`examples/values-feature-complete.yaml`](./examples/values-feature-complete.yaml) |
+| Preset | What runs | Example values |
+| --- | --- | --- |
+| **Errors only** (default, lightweight) | Error tracking: web, relay, snuba errors/outcomes, taskbroker, ingest-events/attachments, cleanup | [`examples/values-errors-only.yaml`](./examples/values-errors-only.yaml) |
+| **Errors + transactions** | Adds the performance/tracing pipeline | [`examples/values-errors-transactions.yaml`](./examples/values-errors-transactions.yaml) |
+| **Feature complete** | Full parity: replays, metrics, profiling, EAP, monitors, uptime, spans, launchpad, vroom | [`examples/values-feature-complete.yaml`](./examples/values-feature-complete.yaml) |
 
 ```bash
 helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
   -n sentry --create-namespace -f examples/values-errors-transactions.yaml
 ```
 
-To build errors + transactions on top of the default `errors-only` profile, turn
-on just the transaction-path components:
+To build errors + transactions on top of the defaults, surface the performance
+product (`sentry.selfHostedErrorsOnly: false`) and turn on just the
+transaction-path components:
 
 ```yaml
 sentry:
-  profile: errors-only
+  selfHostedErrorsOnly: false   # show the performance/transactions UI
   transactions: { enabled: true }
   postProcessForwarderTransactions: { enabled: true }
   subscriptionConsumerTransactions: { enabled: true }
@@ -100,6 +102,11 @@ snuba:
   transactionsConsumer: { enabled: true }
   subscriptionConsumerTransactions: { enabled: true }
 ```
+
+`sentry.selfHostedErrorsOnly` maps directly to Sentry's
+`SENTRY_SELF_HOSTED_ERRORS_ONLY` setting: `true` (default) hides the
+performance/replays/etc. product surfaces; set it `false` once you enable those
+pipelines.
 
 ## ClickHouse: single-node vs HA
 
@@ -292,7 +299,7 @@ No `wait_for_jobs`/hook gymnastics needed — initialization is a normal Job.
 The full value surface is documented inline in [`values.yaml`](./values.yaml).
 Highlights:
 
-- `sentry.profile`, `sentry.eventRetentionDays`, `sentry.system.url`
+- `sentry.selfHostedErrorsOnly`, `sentry.eventRetentionDays`, `sentry.system.url`
 - per-component blocks (`enabled`, `replicas`, `resources`, `nodeSelector`,
   `affinity`, `tolerations`, `autoscaling`, …)
 - `clickhouse.*` (layout, keeper, settings/profiles, persistence)

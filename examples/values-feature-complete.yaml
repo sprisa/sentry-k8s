@@ -7,16 +7,69 @@ global:
   storageClass: longhorn
 
 sentry:
-  profile: feature-complete
+  # Surface every product (performance, replays, profiling, etc.).
+  selfHostedErrorsOnly: false
   system:
     url: https://sentry.example.com
+
+  # Full pipeline (Sentry side). errors-only consumers stay on via the defaults.
+  transactions: { enabled: true }
+  metrics: { enabled: true }
+  genericMetrics: { enabled: true }
+  billingMetrics: { enabled: true }
+  ingestReplayRecordings: { enabled: true }
+  ingestOccurrences: { enabled: true }
+  ingestProfiles: { enabled: true }
+  ingestMonitors: { enabled: true }
+  ingestFeedback: { enabled: true }
+  processSpans: { enabled: true }
+  processSegments: { enabled: true }
+  monitorsClockTick: { enabled: true }
+  monitorsClockTasks: { enabled: true }
+  uptimeResults: { enabled: true }
+  postProcessForwarderTransactions: { enabled: true }
+  postProcessForwarderIssuePlatform: { enabled: true }
+  subscriptionConsumerTransactions: { enabled: true }
+  subscriptionConsumerMetrics: { enabled: true }
+  subscriptionConsumerGenericMetrics: { enabled: true }
+  subscriptionConsumerEapItems: { enabled: true }
+
+# Full pipeline (Snuba side).
+snuba:
+  transactionsConsumer: { enabled: true }
+  replaysConsumer: { enabled: true }
+  issueOccurrenceConsumer: { enabled: true }
+  metricsConsumer: { enabled: true }
+  genericMetricsSetsConsumer: { enabled: true }
+  genericMetricsCountersConsumer: { enabled: true }
+  genericMetricsDistributionsConsumer: { enabled: true }
+  genericMetricsGaugesConsumer: { enabled: true }
+  profilingProfilesConsumer: { enabled: true }
+  profilingFunctionsConsumer: { enabled: true }
+  profilingChunksConsumer: { enabled: true }
+  eapItemsConsumer: { enabled: true }
+  subscriptionConsumerTransactions: { enabled: true }
+  subscriptionConsumerMetrics: { enabled: true }
+  subscriptionConsumerGenericMetricsSets: { enabled: true }
+  subscriptionConsumerGenericMetricsCounters: { enabled: true }
+  subscriptionConsumerGenericMetricsDistributions: { enabled: true }
+  subscriptionConsumerGenericMetricsGauges: { enabled: true }
+  subscriptionConsumerEapItems: { enabled: true }
 
 user:
   create: true
   email: admin@example.com
   existingSecret: sentry-admin           # password read from this Secret (key: admin-password)
 
-# Native stacktrace symbolication (off by default even in feature-complete).
+# Profiling (vroom), uptime checks, and launchpad workers.
+vroom:
+  enabled: true
+uptimeChecker:
+  enabled: true
+launchpad:
+  enabled: true
+
+# Native stacktrace symbolication (opt-in).
 symbolicator:
   enabled: true
 

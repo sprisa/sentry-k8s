@@ -2,7 +2,7 @@
 
 {{- /* ---------- uptime-checker (feature-complete) ---------- */}}
 {{- $uc := .Values.uptimeChecker }}
-{{- $ucEnabled := include "sentry.enabled" (dict "root" . "component" $uc "tier" "feature-complete") }}
+{{- $ucEnabled := include "sentry.enabled" (dict "component" $uc) }}
 {{- if eq $ucEnabled "true" }}
 apiVersion: apps/v1
 kind: Deployment
@@ -52,7 +52,7 @@ spec:
 
 {{- /* ---------- launchpad-taskworker (feature-complete) ---------- */}}
 {{- $lp := .Values.launchpad }}
-{{- $lpEnabled := include "sentry.enabled" (dict "root" . "component" $lp "tier" "feature-complete") }}
+{{- $lpEnabled := include "sentry.enabled" (dict "component" $lp) }}
 {{- if eq $lpEnabled "true" }}
 ---
 apiVersion: apps/v1

@@ -1,6 +1,6 @@
 {{ include "sentry.fullname" . }} ({{ .Chart.Name }}-{{ .Chart.Version }}, Sentry {{ include "sentry.appTag" . }}) is deploying.
 
-Profile: {{ .Values.sentry.profile }}
+Errors-only mode (SENTRY_SELF_HOSTED_ERRORS_ONLY): {{ .Values.sentry.selfHostedErrorsOnly }}
 
 1. The bootstrap Job runs DB migrations with NO Helm hooks (Pulumi/Terraform safe):
      kubectl -n {{ .Release.Namespace }} get jobs -l app.kubernetes.io/component=bootstrap
@@ -29,4 +29,4 @@ Profile: {{ .Values.sentry.profile }}
 5. Run the bundled connectivity checks:
      helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
 
-See README.md for profile presets, ClickHouse HA, persistence, and Pulumi/Terraform usage.
+See README.md for the example presets, ClickHouse HA, persistence, and Pulumi/Terraform usage.

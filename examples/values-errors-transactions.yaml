@@ -1,12 +1,13 @@
 # Errors + performance/transactions (tracing), without replays, metrics, or
-# profiling. Built on the errors-only profile by toggling on just the
+# profiling. Built on the errors-only defaults by toggling on just the
 # transaction-path components (Sentry + Snuba sides).
 
 global:
   storageClass: longhorn
 
 sentry:
-  profile: errors-only
+  # Surface the performance/transactions product (default is errors-only).
+  selfHostedErrorsOnly: false
   system:
     url: https://sentry.example.com
 

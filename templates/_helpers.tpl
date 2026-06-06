@@ -171,20 +171,13 @@ memcached:11211
 {{- end -}}
 
 {{/*
-Effective enabled state for a component.
-Input: dict "root" $ "component" <map> "tier" "errors-only"|"feature-complete".
-- explicit component.enabled wins when set
-- errors-only tier components default on
-- feature-complete tier components default on only when profile == feature-complete
-Returns "true" or "".
+Effective enabled state for a component: purely its own `enabled` flag.
+Input: dict "component" <map>. Returns "true" or "".
+the example values files are the presets that
+toggle these flags (see examples/ and README).
 */}}
 {{- define "sentry.enabled" -}}
-{{- $c := .component -}}
-{{- if hasKey $c "enabled" -}}
-{{- if $c.enabled -}}true{{- end -}}
-{{- else if eq .tier "errors-only" -}}true
-{{- else if eq .root.Values.sentry.profile "feature-complete" -}}true
-{{- end -}}
+{{- if .component.enabled -}}true{{- end -}}
 {{- end -}}
 
 {{/* Image tag actually used (for naming the bootstrap Job). */}}
@@ -274,8 +267,6 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
   value: {{ include "sentry.snuba.host" . }}
 - name: VROOM
   value: {{ include "sentry.vroom.host" . }}
-- name: COMPOSE_PROFILES
-  value: {{ .Values.sentry.profile | quote }}
 - name: SENTRY_EVENT_RETENTION_DAYS
   value: {{ .Values.sentry.eventRetentionDays | quote }}
 - name: SENTRY_POSTGRES_HOST

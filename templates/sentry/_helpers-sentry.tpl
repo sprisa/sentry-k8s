@@ -108,7 +108,7 @@ SENTRY_OPTIONS["system.event-retention-days"] = int(
 if env("SENTRY_SYSTEM_SECRET_KEY"):
     SENTRY_OPTIONS["system.secret-key"] = env("SENTRY_SYSTEM_SECRET_KEY", "")
 
-SENTRY_SELF_HOSTED_ERRORS_ONLY = env("COMPOSE_PROFILES") != "feature-complete"
+SENTRY_SELF_HOSTED_ERRORS_ONLY = {{ .Values.sentry.selfHostedErrorsOnly | ternary "True" "False" }}
 SENTRY_AIR_GAP = False
 
 {{- if eq .Values.nodestore.backend "s3" }}
