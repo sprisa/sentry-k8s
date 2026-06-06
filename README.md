@@ -35,7 +35,7 @@ requests/data flow through the system.
 The chart is published as an **OCI artifact** to GitHub Container Registry.
 
 ```bash
-helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
+helm install sentry oci://ghcr.io/sprisa/sentry-k8s \
   --namespace sentry --create-namespace \
   --set sentry.system.url=https://sentry.example.com \
   --set user.email=admin@example.com \
@@ -49,7 +49,7 @@ Use a profile preset (recommended over `--set` for anything non-trivial):
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/sprisa/sentry-k8s/main/examples/values-feature-complete.yaml
-helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
+helm install sentry oci://ghcr.io/sprisa/sentry-k8s \
   -n sentry --create-namespace -f values-feature-complete.yaml
 ```
 
@@ -84,7 +84,7 @@ that toggle those flags for you. The chart defaults are the errors-only set.
 | **Feature complete** | Full parity: replays, metrics, profiling, EAP, monitors, uptime, spans, launchpad, vroom | [`examples/values-feature-complete.yaml`](./examples/values-feature-complete.yaml) |
 
 ```bash
-helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
+helm install sentry oci://ghcr.io/sprisa/sentry-k8s \
   -n sentry --create-namespace -f examples/values-errors-transactions.yaml
 ```
 
