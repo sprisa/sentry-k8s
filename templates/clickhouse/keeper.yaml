@@ -1,0 +1,147 @@
+{{- if .Values.clickhouse.enabled }}
+{{- $clustered := eq (include "sentry.clickhouse.singleNode" .) "false" }}
+{{- if or .Values.clickhouse.keeper.enabled $clustered }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $kname := printf "%s-clickhouse-keeper" $fullname }}
+{{- $headless := printf "%s-clickhouse-keeper-headless" $fullname }}
+{{- $count := int .Values.clickhouse.keeper.replicaCount }}
+{{- $sc := .Values.clickhouse.keeper.persistence.storageClass | default .Values.global.storageClass }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $kname }}-config
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse-keeper
+data:
+  keeper.xml: |
+    <clickhouse>
+        <logger>
+            <level>warning</level>
+            <console>true</console>
+        </logger>
+        <listen_host>0.0.0.0</listen_host>
+        <keeper_server>
+            <tcp_port>9181</tcp_port>
+            <server_id from_env="KEEPER_SERVER_ID"/>
+            <log_storage_path>/var/lib/clickhouse-keeper/log</log_storage_path>
+            <snapshot_storage_path>/var/lib/clickhouse-keeper/snapshots</snapshot_storage_path>
+            <coordination_settings>
+                <operation_timeout_ms>10000</operation_timeout_ms>
+                <session_timeout_ms>30000</session_timeout_ms>
+                <raft_logs_level>warning</raft_logs_level>
+            </coordination_settings>
+            <raft_configuration>
+                {{- range $i := until $count }}
+                <server>
+                    <id>{{ add $i 1 }}</id>
+                    <hostname>{{ $kname }}-{{ $i }}.{{ $headless }}</hostname>
+                    <port>9234</port>
+                </server>
+                {{- end }}
+            </raft_configuration>
+        </keeper_server>
+    </clickhouse>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $headless }}
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse-keeper
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: client
+      port: 9181
+    - name: raft
+      port: 9234
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse-keeper
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $kname }}
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse-keeper
+spec:
+  serviceName: {{ $headless }}
+  replicas: {{ $count }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse-keeper
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse-keeper
+      annotations:
+        checksum/config: {{ printf "keeper-%d" (int .Values.clickhouse.keeper.replicaCount) | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.clickhouse.keeper.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        fsGroup: 101
+      containers:
+        - name: keeper
+          image: "{{ .Values.clickhouse.keeper.image.repository }}:{{ .Values.clickhouse.keeper.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.keeper.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              export KEEPER_SERVER_ID=$((${HOSTNAME##*-} + 1))
+              exec /usr/bin/clickhouse-keeper --config-file=/etc/clickhouse-keeper/keeper.xml
+          ports:
+            - name: client
+              containerPort: 9181
+            - name: raft
+              containerPort: 9234
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse-keeper
+            - name: config
+              mountPath: /etc/clickhouse-keeper/keeper.xml
+              subPath: keeper.xml
+          {{- with .Values.clickhouse.keeper.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $kname }}-config
+        {{- if not .Values.clickhouse.keeper.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.clickhouse.keeper.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sentry.labels" . | nindent 10 }}
+          app.kubernetes.io/component: clickhouse-keeper
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if $sc }}
+        storageClassName: {{ $sc | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.keeper.persistence.size }}
+  {{- end }}
+{{- end }}
+{{- end }}

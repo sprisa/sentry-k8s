@@ -1,0 +1,49 @@
+{{- $fullname := include "sentry.fullname" . }}
+{{- $c := .Values.sentry.cleanup }}
+{{- if (ne $c.enabled false) }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-sentry-cleanup
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentry-cleanup
+spec:
+  schedule: {{ $c.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "sentry.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: sentry-cleanup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+          {{- include "sentry.imagePullSecrets" . | nindent 10 }}
+          {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 10 }}
+          containers:
+            - name: sentry-cleanup
+              image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
+              imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+              args: ["cleanup", "--days", "{{ .Values.sentry.eventRetentionDays }}"]
+              env:
+                {{- include "sentry.sentryEnv" . | nindent 16 }}
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/sentry
+                - name: sentry-data
+                  mountPath: /data
+              {{- with $c.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: config
+              configMap:
+                name: {{ $fullname }}-sentry-config
+            {{- include "sentry.dataVolume" . | nindent 12 }}
+{{- end }}

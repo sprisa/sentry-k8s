@@ -1,0 +1,22 @@
+{{- if and (eq .Values.filestore.backend "filesystem") .Values.filestore.filesystem.persistence.enabled (not .Values.filestore.filesystem.persistence.existingClaim) }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $sc := .Values.filestore.filesystem.persistence.storageClass | default .Values.global.storageClass }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-filestore
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: filestore
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - {{ .Values.filestore.filesystem.persistence.accessMode | default "ReadWriteOnce" }}
+  {{- if $sc }}
+  storageClassName: {{ $sc | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.filestore.filesystem.persistence.size }}
+{{- end }}

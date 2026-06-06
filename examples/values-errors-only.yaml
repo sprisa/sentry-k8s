@@ -1,0 +1,62 @@
+# Errors-only: the lightweight default. Web, relay, Snuba (errors/outcomes),
+# taskbroker, ingest-events/attachments, cleanup. No transactions, replays,
+# metrics, or profiling. Good for a single node.
+
+global:
+  # Propagated to ClickHouse PVCs and the Bitnami Postgres/Redis/Kafka subcharts.
+  storageClass: longhorn
+
+sentry:
+  profile: errors-only          # errors-only | feature-complete
+  system:
+    # Public URL users hit (TLS terminates upstream at your proxy).
+    # Drives system.url-prefix + CSRF_TRUSTED_ORIGINS; X-Forwarded-Proto is trusted.
+    url: https://sentry.example.com
+
+# Initial superuser created by the bootstrap Job.
+user:
+  create: true
+  email: admin@example.com
+  # Provide via existingSecret in real deployments instead of plaintext.
+  password: changeme-please
+
+clickhouse:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 50Gi
+  # Server-level (config.xml) and per-profile (users.xml) tuning
+  settings:
+    max_server_memory_usage_to_ram_ratio: "0.7"
+  profiles:
+    default/max_memory_usage: "4294967296"   # 4 GiB
+
+# Object storage: filesystem PVC (simplest). For multi-node, switch to S3/R2
+# or set accessMode: ReadWriteMany. persistentWorkers shares the PVC with
+# worker/cron pods (keep all Sentry pods on one node via nodeSelector with RWO).
+filestore:
+  backend: filesystem
+  filesystem:
+    persistence:
+      enabled: true
+      size: 20Gi
+      accessMode: ReadWriteOnce
+      persistentWorkers: true
+
+# Bundled datastores (defaults shown for clarity; all default to enabled).
+postgresql:
+  enabled: true
+redis:
+  enabled: true
+kafka:
+  enabled: true
+
+# Mail is disabled by default. To enable outbound email:
+# mail:
+#   enabled: true
+#   host: smtp.example.com
+#   port: 587
+#   username: apikey
+#   password: ""
+#   useTls: true
+#   from: sentry@example.com

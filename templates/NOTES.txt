@@ -1,0 +1,32 @@
+{{ include "sentry.fullname" . }} ({{ .Chart.Name }}-{{ .Chart.Version }}, Sentry {{ include "sentry.appTag" . }}) is deploying.
+
+Profile: {{ .Values.sentry.profile }}
+
+1. The bootstrap Job runs DB migrations with NO Helm hooks (Pulumi/Terraform safe):
+     kubectl -n {{ .Release.Namespace }} get jobs -l app.kubernetes.io/component=bootstrap
+   App pods wait for infra and may restart a few times until bootstrap finishes.
+
+2. Entry point is the bundled nginx proxy (single ClusterIP):
+     {{ include "sentry.fullname" . }}-nginx (port {{ .Values.nginx.service.port | default 80 }})
+   Point your own Ingress / Contour HTTPProxy / load balancer at it.
+{{- if .Values.ingress.enabled }}
+   A networking.k8s.io/v1 Ingress is enabled for host: {{ .Values.ingress.hostname | default "(none set)" }}
+{{- end }}
+
+3. Port-forward to try it locally:
+     kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "sentry.fullname" . }}-nginx 8080:{{ .Values.nginx.service.port | default 80 }}
+   then open http://localhost:8080
+
+{{- if .Values.user.create }}
+
+4. Admin login: {{ .Values.user.email }}
+{{- if not .Values.user.existingSecret }}
+   Password:
+     kubectl -n {{ .Release.Namespace }} get secret {{ include "sentry.secretName" . }} -o jsonpath='{.data.admin-password}' | base64 -d
+{{- end }}
+{{- end }}
+
+5. Run the bundled connectivity checks:
+     helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+See README.md for profile presets, ClickHouse HA, persistence, and Pulumi/Terraform usage.

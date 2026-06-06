@@ -1,0 +1,92 @@
+# Full parity with docker-compose feature-complete: transactions, replays,
+# metrics, generic-metrics, profiling, EAP, monitors, uptime, spans/segments,
+# launchpad, vroom. Uses object storage (R2/S3) and shows the optional HA
+# ClickHouse layout. Resource-heavy (~40 pods) - size datastores accordingly.
+
+global:
+  storageClass: longhorn
+
+sentry:
+  profile: feature-complete
+  system:
+    url: https://sentry.example.com
+
+user:
+  create: true
+  email: admin@example.com
+  existingSecret: sentry-admin           # password read from this Secret (key: admin-password)
+
+# Native stacktrace symbolication (off by default even in feature-complete).
+symbolicator:
+  enabled: true
+
+clickhouse:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 500Gi
+  # Pin the datastore to a beefy node
+  nodeSelector:
+    kubernetes.io/hostname: datastore-node-1
+  settings:
+    max_server_memory_usage_to_ram_ratio: "0.75"
+  profiles:
+    default/max_memory_usage: "8589934592"            # 8 GiB
+    default/max_bytes_before_external_group_by: "6442450944"
+    default/max_bytes_before_external_sort: "6442450944"
+
+  # --- Optional HA (uncomment for multi-node). Auto-enables ClickHouse Keeper,
+  # templates remote_servers + macros, and switches Snuba to clustered mode. ---
+  # layout:
+  #   shardsCount: 2
+  #   replicasCount: 2
+  # clusterName: sentry
+  # keeper:
+  #   enabled: true
+  #   replicaCount: 3
+
+# Object storage for filestore, nodestore, replays, and profiles.
+# Recommended for feature-complete (replays/profiling are storage-heavy).
+# The R2 credentials live in a Secret with keys AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY.
+filestore:
+  backend: s3
+  s3:
+    existingSecret: sentry-r2
+    bucketName: sentry
+    endpointUrl: https://<account>.r2.cloudflarestorage.com
+    region_name: auto
+  profiles:
+    backend: s3
+    s3:
+      existingSecret: sentry-r2
+      bucketName: sentry-profiles
+      endpointUrl: https://<account>.r2.cloudflarestorage.com
+      region_name: auto
+
+replay:
+  storage:
+    backend: s3
+    s3:
+      existingSecret: sentry-r2
+      bucketName: sentry-replays
+      endpointUrl: https://<account>.r2.cloudflarestorage.com
+      region_name: auto
+
+nodestore:
+  backend: s3                            # installs sentry-nodestore-s3 via init container
+  s3:
+    existingSecret: sentry-r2
+    bucketName: sentry-nodestore
+    endpointUrl: https://<account>.r2.cloudflarestorage.com
+    region_name: auto
+
+kafka:
+  enabled: true
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      size: 50Gi
+redis:
+  enabled: true

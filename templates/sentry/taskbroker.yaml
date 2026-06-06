@@ -1,0 +1,118 @@
+{{- $fullname := include "sentry.fullname" . }}
+{{- $c := .Values.sentry.taskbroker }}
+{{- if (ne $c.enabled false) }}
+{{- $sc := $c.persistence.storageClass | default .Values.global.storageClass }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-taskbroker-config
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: taskbroker
+data:
+  config.yml: |
+    kafka_deadletter_topic: taskworker-dlq
+    kafka_topics:
+      taskworker:
+        cluster: default
+        consumer_group: taskworker
+      taskworker-dlq:
+        cluster: default
+        consumer_group: taskworker
+        produce_only: true
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-taskbroker
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: taskbroker
+spec:
+  serviceName: {{ $fullname }}-taskbroker
+  replicas: {{ $c.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: taskbroker
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: taskbroker
+      annotations:
+        checksum/config: {{ include "sentry.kafka.bootstrap" . | sha256sum }}
+        {{- with $c.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
+      initContainers:
+        {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka")) | nindent 8 }}
+      containers:
+        - name: taskbroker
+          image: "{{ include "sentry.image" (dict "root" . "key" "taskbroker" "override" $c.image) }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "taskbroker" "override" $c.image) }}
+          command: ["/opt/taskbroker", "-c", "/etc/taskbroker/config.yml"]
+          env:
+            - name: TASKBROKER_KAFKA_CLUSTERS__DEFAULT__ADDRESS
+              value: {{ include "sentry.kafka.bootstrap" . | quote }}
+            - name: TASKBROKER_DB_PATH
+              value: /opt/sqlite/taskbroker-activations.sqlite
+            {{- with $c.env }}{{ toYaml . | nindent 12 }}{{- end }}
+          ports:
+            - name: grpc
+              containerPort: 50051
+          volumeMounts:
+            - name: data
+              mountPath: /opt/sqlite
+            - name: config
+              mountPath: /etc/taskbroker
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-taskbroker-config
+        {{- if not $c.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if $c.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sentry.labels" . | nindent 10 }}
+          app.kubernetes.io/component: taskbroker
+      spec:
+        accessModes:
+          - {{ $c.persistence.accessMode | default "ReadWriteOnce" }}
+        {{- if $sc }}
+        storageClassName: {{ $sc | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $c.persistence.size }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-taskbroker
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: taskbroker
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: taskbroker
+{{- end }}

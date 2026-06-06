@@ -1,0 +1,139 @@
+{{- $fullname := include "sentry.fullname" . }}
+{{- $c := .Values.sentry.web }}
+{{- if (ne $c.enabled false) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-web
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ $c.replicas | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+        {{- with $c.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/sentry/configmap.yaml") . | sha256sum }}
+        {{- with $c.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
+      {{- with $c.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka" "redis" "postgres")) | nindent 8 }}
+        {{- if eq .Values.nodestore.backend "s3" }}
+        - name: install-nodestore-s3
+          image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+          command: ["pip", "install", "--user", "sentry-nodestore-s3"]
+          env:
+            - name: PYTHONUSERBASE
+              value: /data/custom-packages
+          volumeMounts:
+            - name: sentry-data
+              mountPath: /data
+        {{- end }}
+      containers:
+        - name: web
+          image: "{{ include "sentry.image" (dict "root" . "key" "sentry" "override" $c.image) }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry" "override" $c.image) }}
+          args: ["run", "web"]
+          env:
+            {{- include "sentry.sentryEnv" . | nindent 12 }}
+            {{- with $c.env }}{{ toYaml . | nindent 12 }}{{- end }}
+          ports:
+            - name: http
+              containerPort: 9000
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sentry
+            - name: sentry-data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /_health/
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /_health/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 6
+          {{- with $c.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-sentry-config
+        {{- include "sentry.dataVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-web
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- with $c.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+{{- if $c.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $fullname }}-web
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $fullname }}-web
+  minReplicas: {{ $c.autoscaling.minReplicas }}
+  maxReplicas: {{ $c.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $c.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

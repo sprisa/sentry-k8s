@@ -1,0 +1,4 @@
+# Vendored Helm dependencies are regenerated from Chart.lock via
+# `helm dependency build`. Commit Chart.lock, not the tarballs.
+charts/
+*.tgz

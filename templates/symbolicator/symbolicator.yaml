@@ -1,0 +1,121 @@
+{{- $fullname := include "sentry.fullname" . }}
+{{- $c := .Values.symbolicator }}
+{{- if $c.enabled }}
+{{- $sc := $c.persistence.storageClass | default .Values.global.storageClass }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-symbolicator-config
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: symbolicator
+data:
+  config.yml: |
+    bind: 0.0.0.0:3021
+    logging:
+      level: warn
+      format: simplified
+      enable_backtraces: true
+    metrics:
+      statsd: null
+    cache_dir: /data
+    connect_to_reserved_ips: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-symbolicator
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: symbolicator
+spec:
+  replicas: {{ $c.replicas | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: symbolicator
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: symbolicator
+      annotations:
+        checksum/config: {{ printf "symbolicator-%s" (include "sentry.fullname" .) | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
+      containers:
+        - name: symbolicator
+          image: "{{ include "sentry.image" (dict "root" . "key" "symbolicator") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "symbolicator") }}
+          args: ["run", "-c", "/etc/symbolicator/config.yml"]
+          ports:
+            - name: http
+              containerPort: 3021
+          volumeMounts:
+            - name: config
+              mountPath: /etc/symbolicator
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          {{- with $c.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-symbolicator-config
+        - name: data
+          {{- if $c.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-symbolicator
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-symbolicator
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: symbolicator
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3021
+      targetPort: http
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: symbolicator
+{{- if $c.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-symbolicator
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: symbolicator
+spec:
+  accessModes:
+    - {{ $c.persistence.accessMode | default "ReadWriteOnce" }}
+  {{- if $sc }}
+  storageClassName: {{ $sc | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $c.persistence.size }}
+{{- end }}
+{{- end }}

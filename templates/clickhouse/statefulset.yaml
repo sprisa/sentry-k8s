@@ -1,0 +1,144 @@
+{{- if .Values.clickhouse.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $shards := int .Values.clickhouse.layout.shardsCount }}
+{{- $replicas := int .Values.clickhouse.layout.replicasCount }}
+{{- $count := mul $shards $replicas }}
+{{- $clustered := eq (include "sentry.clickhouse.singleNode" .) "false" }}
+{{- $sc := .Values.clickhouse.persistence.storageClass | default .Values.global.storageClass }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-clickhouse
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: {{ $fullname }}-clickhouse-headless
+  replicas: {{ $count }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse
+        {{- with .Values.clickhouse.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/clickhouse/configmap.yaml") . | sha256sum }}
+        {{- with .Values.clickhouse.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" .Values.clickhouse) | nindent 6 }}
+      securityContext:
+        fsGroup: 101
+      {{- if $clustered }}
+      initContainers:
+        - name: init-macros
+          image: "{{ include "sentry.image" (dict "root" . "key" "busybox") }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              ORD=${HOSTNAME##*-}
+              SHARD=$((ORD / {{ $replicas }} + 1))
+              REPLICA=$((ORD % {{ $replicas }} + 1))
+              cat > /etc/clickhouse-server/config.d/macros.xml <<EOF
+              <clickhouse>
+                <macros>
+                  <cluster>{{ .Values.clickhouse.clusterName }}</cluster>
+                  <shard>${SHARD}</shard>
+                  <replica>{{ $fullname }}-clickhouse-${ORD}</replica>
+                </macros>
+              </clickhouse>
+              EOF
+          volumeMounts:
+            - name: config-d
+              mountPath: /etc/clickhouse-server/config.d
+      {{- end }}
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: tcp
+              containerPort: 9000
+            - name: http
+              containerPort: 8123
+            - name: interserver
+              containerPort: 9009
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: config-file
+              mountPath: /etc/clickhouse-server/config.d/sentry.xml
+              subPath: sentry.xml
+            - name: users-file
+              mountPath: /etc/clickhouse-server/users.d/sentry-users.xml
+              subPath: sentry-users.xml
+            {{- if $clustered }}
+            - name: config-d
+              mountPath: /etc/clickhouse-server/config.d
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          {{- with .Values.clickhouse.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config-file
+          configMap:
+            name: {{ $fullname }}-clickhouse-config
+            items:
+              - key: sentry.xml
+                path: sentry.xml
+        - name: users-file
+          configMap:
+            name: {{ $fullname }}-clickhouse-config
+            items:
+              - key: sentry-users.xml
+                path: sentry-users.xml
+        {{- if $clustered }}
+        - name: config-d
+          emptyDir: {}
+        {{- end }}
+        {{- if not .Values.clickhouse.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.clickhouse.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sentry.labels" . | nindent 10 }}
+          app.kubernetes.io/component: clickhouse
+      spec:
+        accessModes:
+          - {{ .Values.clickhouse.persistence.accessMode | default "ReadWriteOnce" }}
+        {{- if $sc }}
+        storageClassName: {{ $sc | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.persistence.size }}
+  {{- end }}
+{{- end }}

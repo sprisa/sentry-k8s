@@ -1,0 +1,51 @@
+{{- if .Values.clickhouse.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-clickhouse
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+  {{- with .Values.clickhouse.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp
+      port: 9000
+      targetPort: tcp
+    - name: http
+      port: 8123
+      targetPort: http
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-clickhouse-headless
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp
+      port: 9000
+      targetPort: tcp
+    - name: http
+      port: 8123
+      targetPort: http
+    - name: interserver
+      port: 9009
+      targetPort: interserver
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+{{- end }}

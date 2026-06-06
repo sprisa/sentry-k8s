@@ -1,0 +1,58 @@
+# Errors + performance/transactions (tracing), without replays, metrics, or
+# profiling. Built on the errors-only profile by toggling on just the
+# transaction-path components (Sentry + Snuba sides).
+
+global:
+  storageClass: longhorn
+
+sentry:
+  profile: errors-only
+  system:
+    url: https://sentry.example.com
+
+  # Turn on the transactions pipeline (Sentry side).
+  transactions:
+    enabled: true                      # ingest-transactions consumer
+  postProcessForwarderTransactions:
+    enabled: true
+  subscriptionConsumerTransactions:
+    enabled: true
+
+user:
+  create: true
+  email: admin@example.com
+  password: changeme-please
+
+snuba:
+  # Snuba side of the transactions pipeline.
+  transactionsConsumer:
+    enabled: true
+  subscriptionConsumerTransactions:
+    enabled: true
+
+clickhouse:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 100Gi                        # transactions add volume
+  settings:
+    max_server_memory_usage_to_ram_ratio: "0.7"
+  profiles:
+    default/max_memory_usage: "6442450944"            # 6 GiB
+    default/max_bytes_before_external_group_by: "5368709120"
+
+filestore:
+  backend: filesystem
+  filesystem:
+    persistence:
+      enabled: true
+      size: 40Gi
+      accessMode: ReadWriteOnce
+      persistentWorkers: true
+
+postgresql:
+  enabled: true
+redis:
+  enabled: true
+kafka:
+  enabled: true

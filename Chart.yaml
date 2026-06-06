@@ -1,0 +1,49 @@
+apiVersion: v2
+name: sentry-k8s
+description: >-
+  Self-contained Sentry self-hosted stack for Kubernetes with a first-class
+  bundled ClickHouse (no Altinity operator, no external provisioning). Uses
+  plain Kubernetes resources and NO Helm lifecycle hooks, making it
+  Pulumi- and Terraform-friendly.
+type: application
+# Chart version is independent of the Sentry app version.
+version: 0.1.0
+# renovate image=ghcr.io/getsentry/sentry
+# All getsentry images default to this tag for cross-service compatibility.
+appVersion: "26.5.0"
+keywords:
+  - sentry
+  - error-tracking
+  - observability
+  - clickhouse
+  - snuba
+  - self-hosted
+home: https://github.com/getsentry/self-hosted
+sources:
+  - https://github.com/getsentry/self-hosted
+maintainers:
+  - name: sentry-k8s
+annotations:
+  # Called out as a headline feature: this chart emits only first-class
+  # Kubernetes objects (no helm.sh/hook), so Pulumi's k8s.helm.v3.Chart and
+  # Terraform's helm_release manage every resource cleanly.
+  sentry-k8s/pulumi-friendly: "true"
+  sentry-k8s/terraform-friendly: "true"
+  sentry-k8s/uses-helm-hooks: "false"
+dependencies:
+  - name: postgresql
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: "12.5.1"
+    condition: postgresql.enabled
+  - name: redis
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: "17.11.3"
+    condition: redis.enabled
+  - name: kafka
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: "29.3.14"
+    condition: kafka.enabled
+  - name: memcached
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: "6.5.6"
+    condition: memcached.enabled

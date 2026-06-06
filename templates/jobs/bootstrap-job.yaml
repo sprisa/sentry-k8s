@@ -1,0 +1,108 @@
+{{- if .Values.bootstrap.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $tag := include "sentry.appTag" . | replace "." "-" | replace "+" "-" | replace "_" "-" | lower }}
+{{- $jobName := printf "%s-bootstrap-%s" $fullname $tag | trunc 63 | trimSuffix "-" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $jobName }}
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bootstrap
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bootstrap
+      {{- with .Values.bootstrap.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.bootstrap.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.bootstrap.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.bootstrap.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "clickhouse" "kafka" "redis" "postgres")) | nindent 8 }}
+        - name: snuba-bootstrap
+          image: "{{ include "sentry.image" (dict "root" . "key" "snuba") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "snuba") }}
+          args: ["bootstrap", "--force", "--no-migrate"]
+          env:
+            {{- include "sentry.snubaEnv" . | nindent 12 }}
+        - name: snuba-migrate
+          image: "{{ include "sentry.image" (dict "root" . "key" "snuba") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "snuba") }}
+          args: ["migrations", "migrate", "--force"]
+          env:
+            {{- include "sentry.snubaEnv" . | nindent 12 }}
+        - name: sentry-upgrade
+          image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+          args: ["upgrade", "--noinput", "--create-kafka-topics"]
+          env:
+            {{- include "sentry.sentryEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sentry
+            - name: sentry-data
+              mountPath: /data
+        {{- if .Values.user.create }}
+        - name: create-user
+          image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              sentry createuser --email "$SENTRY_ADMIN_EMAIL" --password "$SENTRY_ADMIN_PASSWORD" --superuser --no-input --force-update || true
+          env:
+            {{- include "sentry.sentryEnv" . | nindent 12 }}
+            - name: SENTRY_ADMIN_EMAIL
+              value: {{ .Values.user.email | quote }}
+            - name: SENTRY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.user.existingSecret }}
+                  name: {{ .Values.user.existingSecret }}
+                  {{- else }}
+                  name: {{ include "sentry.secretName" . }}
+                  {{- end }}
+                  key: admin-password
+          volumeMounts:
+            - name: config
+              mountPath: /etc/sentry
+            - name: sentry-data
+              mountPath: /data
+        {{- end }}
+      containers:
+        - name: done
+          image: "{{ include "sentry.image" (dict "root" . "key" "busybox") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "busybox") }}
+          command: ["/bin/sh", "-c", "echo 'sentry bootstrap complete'"]
+          {{- with .Values.bootstrap.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-sentry-config
+        - name: sentry-data
+          emptyDir: {}
+{{- end }}

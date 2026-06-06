@@ -1,0 +1,112 @@
+{{- $fullname := include "sentry.fullname" . }}
+
+{{- /* ---------- uptime-checker (feature-complete) ---------- */}}
+{{- $uc := .Values.uptimeChecker }}
+{{- $ucEnabled := include "sentry.enabled" (dict "root" . "component" $uc "tier" "feature-complete") }}
+{{- if eq $ucEnabled "true" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-uptime-checker
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: uptime-checker
+spec:
+  replicas: {{ $uc.replicas | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: uptime-checker
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: uptime-checker
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" $uc) | nindent 6 }}
+      initContainers:
+        {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka" "redis")) | nindent 8 }}
+      containers:
+        - name: uptime-checker
+          image: "{{ include "sentry.image" (dict "root" . "key" "uptimeChecker") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "uptimeChecker") }}
+          args: ["run"]
+          env:
+            - name: UPTIME_CHECKER_RESULTS_KAFKA_CLUSTER
+              value: {{ include "sentry.kafka.bootstrap" . | quote }}
+            - name: UPTIME_CHECKER_REDIS_HOST
+              value: "redis://{{ include "sentry.redis.host" . }}:{{ include "sentry.redis.port" . }}"
+            - name: UPTIME_CHECKER_ALLOW_INTERNAL_IPS
+              value: {{ $uc.allowInternalIps | default false | quote }}
+            - name: UPTIME_CHECKER_FAILURE_RETRIES
+              value: {{ $uc.failureRetries | default 1 | quote }}
+            {{- with $uc.env }}{{ toYaml . | nindent 12 }}{{- end }}
+          {{- with $uc.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+
+{{- /* ---------- launchpad-taskworker (feature-complete) ---------- */}}
+{{- $lp := .Values.launchpad }}
+{{- $lpEnabled := include "sentry.enabled" (dict "root" . "component" $lp "tier" "feature-complete") }}
+{{- if eq $lpEnabled "true" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-launchpad
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: launchpad
+spec:
+  replicas: {{ $lp.replicas | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: launchpad
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: launchpad
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" $lp) | nindent 6 }}
+      initContainers:
+        {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka")) | nindent 8 }}
+      containers:
+        - name: launchpad
+          image: "{{ include "sentry.image" (dict "root" . "key" "launchpad") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "launchpad") }}
+          args: ["worker", "--verbose"]
+          env:
+            - name: LAUNCHPAD_WORKER_RPC_HOST
+              value: "{{ $fullname }}-taskbroker:50051"
+            - name: LAUNCHPAD_WORKER_CONCURRENCY
+              value: {{ $lp.concurrency | default 4 | quote }}
+            - name: LAUNCHPAD_WORKER_HEALTH_CHECK_FILE_PATH
+              value: /tmp/health.txt
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ include "sentry.kafka.bootstrap" . | quote }}
+            - name: SENTRY_BASE_URL
+              value: "http://{{ $fullname }}-web:9000"
+            - name: LAUNCHPAD_ENV
+              value: self-hosted
+            - name: LAUNCHPAD_RPC_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sentry.secretName" . }}
+                  key: launchpad-rpc-shared-secret
+            {{- with $lp.env }}{{ toYaml . | nindent 12 }}{{- end }}
+          {{- include "sentry.fileLivenessProbe" . | nindent 10 }}
+          {{- with $lp.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

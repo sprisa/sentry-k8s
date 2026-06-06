@@ -1,0 +1,33 @@
+{{- if .Values.snuba.cleanup.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullname }}-snuba-cleanup
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snuba-cleanup
+spec:
+  schedule: {{ .Values.snuba.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "sentry.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: snuba-cleanup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+          {{- include "sentry.imagePullSecrets" . | nindent 10 }}
+          containers:
+            - name: snuba-cleanup
+              image: "{{ include "sentry.image" (dict "root" . "key" "snuba") }}"
+              imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "snuba") }}
+              args: ["cleanup", "--storage", "errors", "--clickhouse-host", "{{ include "sentry.clickhouse.host" . }}", "--clickhouse-port", "{{ include "sentry.clickhouse.tcpPort" . }}"]
+              env:
+                {{- include "sentry.snubaEnv" . | nindent 16 }}
+{{- end }}

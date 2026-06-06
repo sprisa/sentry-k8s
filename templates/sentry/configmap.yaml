@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentry.fullname" . }}-sentry-config
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sentry-config
+data:
+  config.yml: |
+    {{- include "sentry.configyml" . | nindent 4 }}
+  sentry.conf.py: |
+    {{- include "sentry.confpy" . | nindent 4 }}

@@ -1,0 +1,569 @@
+## sentry-k8s values
+##
+## Profiles: set `sentry.profile` to `errors-only` (default, lightweight) or
+## `feature-complete` (full parity with Sentry self-hosted docker-compose).
+## Every component also has its own `enabled` flag to build intermediate sets.
+##
+## This chart uses NO Helm lifecycle hooks; initialization is a plain Job.
+## That makes it safe to deploy with Pulumi (k8s.helm.v3.Chart) and Terraform.
+
+# -----------------------------------------------------------------------------
+# Global / chart-wide
+# -----------------------------------------------------------------------------
+global:
+  # Propagated to ClickHouse PVCs and the Bitnami Postgres/Redis/Kafka subcharts.
+  storageClass: ""
+  # Default nodeSelector applied to chart-owned workloads (override per-component).
+  nodeSelector: {}
+
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: false
+  name: "sentry"
+  annotations: {}
+  automountServiceAccountToken: true
+
+revisionHistoryLimit: 10
+
+# Raw extra manifests rendered as-is (list of objects or multi-doc strings).
+extraManifests: []
+
+# All getsentry images share Chart.AppVersion when tag is "".
+images:
+  sentry:
+    repository: ghcr.io/getsentry/sentry
+    tag: ""
+    pullPolicy: IfNotPresent
+  snuba:
+    repository: ghcr.io/getsentry/snuba
+    tag: ""
+    pullPolicy: IfNotPresent
+  relay:
+    repository: ghcr.io/getsentry/relay
+    tag: ""
+    pullPolicy: IfNotPresent
+  symbolicator:
+    repository: ghcr.io/getsentry/symbolicator
+    tag: ""
+    pullPolicy: IfNotPresent
+  vroom:
+    repository: ghcr.io/getsentry/vroom
+    tag: ""
+    pullPolicy: IfNotPresent
+  taskbroker:
+    repository: ghcr.io/getsentry/taskbroker
+    tag: ""
+    pullPolicy: IfNotPresent
+  uptimeChecker:
+    repository: ghcr.io/getsentry/uptime-checker
+    tag: ""
+    pullPolicy: IfNotPresent
+  launchpad:
+    repository: ghcr.io/getsentry/launchpad
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Helper images used by init containers / waits / cleanup.
+  busybox:
+    repository: busybox
+    tag: "1.36"
+    pullPolicy: IfNotPresent
+
+# -----------------------------------------------------------------------------
+# Initial superuser + bootstrap (replaces Helm hooks)
+# -----------------------------------------------------------------------------
+user:
+  create: true
+  email: admin@example.com
+  # Provide via existingSecret (key: admin-password) in real deployments.
+  password: ""
+  existingSecret: ""
+
+bootstrap:
+  # Run the init Job: snuba bootstrap -> sentry upgrade -> create user -> sentinel.
+  enabled: true
+  ttlSecondsAfterFinished: 1800
+  # Init container nc-waits for ClickHouse/Kafka/Postgres/Redis before migrating.
+  waitForInfra: true
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  # App pods poll this sentinel (a ConfigMap) to know the bootstrap finished.
+  sentinel:
+    enabled: true
+
+# -----------------------------------------------------------------------------
+# Sentry (core + workers)
+# -----------------------------------------------------------------------------
+sentry:
+  # errors-only | feature-complete
+  profile: errors-only
+  eventRetentionDays: 90
+
+  system:
+    # Public URL users hit (TLS terminates upstream at your proxy).
+    # Drives system.url-prefix + CSRF_TRUSTED_ORIGINS; X-Forwarded-Proto trusted.
+    url: ""
+    adminEmail: ""
+
+  # Extra SENTRY_FEATURES flags: { "organizations:feature": true }
+  features: {}
+  # Extra raw python appended to sentry.conf.py
+  config: ""
+  # Extra config.yml keys (map merged into config.yml)
+  configYml: {}
+
+  web:
+    enabled: true
+    replicas: 1
+    workers: 3
+    image: {}
+    env: []
+    resources: {}
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+    podAnnotations: {}
+    podLabels: {}
+    securityContext: {}
+    containerSecurityContext: {}
+    priorityClassName: ""
+    service:
+      annotations: {}
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 75
+
+  taskbroker:
+    enabled: true
+    replicas: 1
+    image: {}
+    env: []
+    resources: {}
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+    podAnnotations: {}
+    persistence:
+      enabled: true
+      size: 10Gi
+      accessMode: ReadWriteOnce
+      storageClass: ""
+
+  taskscheduler:
+    enabled: true
+    replicas: 1
+    resources: {}
+    nodeSelector: {}
+
+  taskworker:
+    enabled: true
+    replicas: 1
+    concurrency: 4
+    resources: {}
+    nodeSelector: {}
+
+  # --- errors-only ingest/consumers (always on under errors-only) ---
+  ingestEvents: {}
+  ingestAttachments: {}
+  postProcessForwarderErrors: {}
+  subscriptionConsumerEvents: {}
+
+  cleanup:
+    enabled: true
+    schedule: "0 0 * * *"
+    resources: {}
+    nodeSelector: {}
+
+  # --- feature-complete consumers (on when profile=feature-complete or enabled:true) ---
+  transactions: {}
+  metrics: {}
+  genericMetrics: {}
+  billingMetrics: {}
+  ingestReplayRecordings: {}
+  ingestOccurrences: {}
+  ingestProfiles: {}
+  ingestMonitors: {}
+  ingestFeedback: {}
+  processSpans: {}
+  processSegments: {}
+  monitorsClockTick: {}
+  monitorsClockTasks: {}
+  uptimeResults: {}
+  postProcessForwarderTransactions: {}
+  postProcessForwarderIssuePlatform: {}
+  subscriptionConsumerTransactions: {}
+  subscriptionConsumerMetrics: {}
+  subscriptionConsumerGenericMetrics: {}
+  subscriptionConsumerEapItems: {}
+
+# -----------------------------------------------------------------------------
+# Snuba
+# -----------------------------------------------------------------------------
+snuba:
+  rustConsumer: true
+  clickhouse:
+    maxConnections: 100
+  cleanup:
+    # NOT production-ready; off by default.
+    enabled: false
+    schedule: "0 * * * *"
+
+  api:
+    enabled: true
+    replicas: 1
+    resources: {}
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+    podAnnotations: {}
+    service:
+      annotations: {}
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 75
+
+  # --- errors-only ---
+  consumer: {}
+  outcomesConsumer: {}
+  outcomesBillingConsumer: {}
+  replacer: {}
+  groupAttributesConsumer: {}
+  subscriptionConsumerEvents: {}
+
+  # --- feature-complete ---
+  transactionsConsumer: {}
+  replaysConsumer: {}
+  issueOccurrenceConsumer: {}
+  metricsConsumer: {}
+  genericMetricsSetsConsumer: {}
+  genericMetricsCountersConsumer: {}
+  genericMetricsDistributionsConsumer: {}
+  genericMetricsGaugesConsumer: {}
+  profilingProfilesConsumer: {}
+  profilingFunctionsConsumer: {}
+  profilingChunksConsumer: {}
+  eapItemsConsumer: {}
+  subscriptionConsumerTransactions: {}
+  subscriptionConsumerMetrics: {}
+  subscriptionConsumerGenericMetricsSets: {}
+  subscriptionConsumerGenericMetricsCounters: {}
+  subscriptionConsumerGenericMetricsDistributions: {}
+  subscriptionConsumerGenericMetricsGauges: {}
+  subscriptionConsumerEapItems: {}
+
+# -----------------------------------------------------------------------------
+# Relay (always on; ingest edge)
+# -----------------------------------------------------------------------------
+relay:
+  enabled: true
+  replicas: 1
+  mode: managed
+  image: {}
+  env: []
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  service:
+    annotations: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+
+# -----------------------------------------------------------------------------
+# Symbolicator (opt-in even in feature-complete)
+# -----------------------------------------------------------------------------
+symbolicator:
+  enabled: false
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  api:
+    useDeployment: true
+  persistence:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+
+# -----------------------------------------------------------------------------
+# vroom / uptimeChecker / launchpad (feature-complete)
+# -----------------------------------------------------------------------------
+vroom:
+  enabled: false
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  persistence:
+    enabled: true
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+
+uptimeChecker:
+  enabled: false
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  allowInternalIps: false
+  failureRetries: 1
+
+launchpad:
+  enabled: false
+  replicas: 1
+  concurrency: 4
+  resources: {}
+  nodeSelector: {}
+
+# -----------------------------------------------------------------------------
+# ClickHouse (bundled, first-class - no operator)
+# -----------------------------------------------------------------------------
+clickhouse:
+  enabled: true
+  image:
+    repository: altinity/clickhouse-server
+    tag: 25.3.6.10034.altinitystable
+    pullPolicy: IfNotPresent
+  # Default-user password; "" => no password (matches docker-compose).
+  password: ""
+  existingSecret: ""
+  existingSecretKey: clickhouse-password
+  # Single-node by default. Set shards/replicas > 1 to auto-enable Keeper + cluster.
+  layout:
+    shardsCount: 1
+    replicasCount: 1
+  clusterName: sentry
+  distributedClusterName: ""
+  keeper:
+    # Auto-enabled when shardsCount>1 or replicasCount>1; force on/off here.
+    enabled: false
+    replicaCount: 3
+    image:
+      repository: altinity/clickhouse-keeper
+      tag: 25.3.6.10034.altinitystable
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    resources: {}
+    nodeSelector: {}
+  # settings -> config.xml (server level), profiles -> users.xml.
+  settings:
+    max_server_memory_usage_to_ram_ratio: "0.3"
+  profiles: {}
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  podLabels: {}
+  service:
+    annotations: {}
+
+externalClickhouse:
+  # Used only when clickhouse.enabled=false.
+  host: ""
+  tcpPort: 9000
+  httpPort: 8123
+  username: default
+  password: ""
+  database: default
+  singleNode: true
+  clusterName: ""
+  existingSecret: ""
+  existingSecretKey: clickhouse-password
+
+# -----------------------------------------------------------------------------
+# Datastores (Bitnami subcharts) + external alternatives
+# -----------------------------------------------------------------------------
+kafka:
+  enabled: true
+  # 50 MB message ceiling (matches docker-compose). Applied to broker + relay/sentry.
+  maxMessageBytes: 50000000
+  # Bitnami kafka passthrough
+  listeners:
+    client:
+      protocol: PLAINTEXT
+  controller:
+    replicaCount: 1
+  broker:
+    replicaCount: 0
+  extraConfig: |
+    message.max.bytes=50000000
+    replica.fetch.max.bytes=50000000
+  persistence:
+    size: 20Gi
+
+externalKafka:
+  # When kafka.enabled=false, list brokers: [{ host: kafka, port: 9092 }]
+  brokers: []
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      size: 8Gi
+
+externalRedis:
+  host: ""
+  port: 6379
+  password: ""
+  db: 0
+  ssl: false
+  existingSecret: ""
+
+postgresql:
+  enabled: true
+  auth:
+    database: sentry
+    username: postgres
+    postgresPassword: ""
+  primary:
+    persistence:
+      size: 20Gi
+
+externalPostgresql:
+  host: ""
+  port: 5432
+  username: postgres
+  password: ""
+  database: sentry
+  sslMode: prefer
+  existingSecret: ""
+
+memcached:
+  enabled: true
+  # Bitnami memcached passthrough
+  architecture: standalone
+
+pgbouncer:
+  enabled: false
+  replicas: 2
+  poolMode: transaction
+
+# -----------------------------------------------------------------------------
+# Storage backends (filestore / replay / nodestore / mail)
+# -----------------------------------------------------------------------------
+filestore:
+  # filesystem | s3 | gcs
+  backend: filesystem
+  filesystem:
+    path: /data/files
+    persistence:
+      enabled: true
+      size: 20Gi
+      accessMode: ReadWriteOnce
+      persistentWorkers: true
+      existingClaim: ""
+      storageClass: ""
+  s3:
+    existingSecret: ""
+    accessKey: ""
+    secretKey: ""
+    bucketName: ""
+    endpointUrl: ""
+    region_name: ""
+    signature_version: s3v4
+    default_acl: ""
+    addressing_style: path
+  gcs: {}
+  # Profiles can use a separate backend (recommended: s3).
+  profiles:
+    backend: filesystem
+    s3:
+      existingSecret: ""
+      accessKey: ""
+      secretKey: ""
+      bucketName: profiles
+      endpointUrl: ""
+      region_name: ""
+    gcs: {}
+    filesystem:
+      path: /var/vroom/sentry-profiles
+
+replay:
+  storage:
+    # "" => use the main filestore backend.
+    backend: ""
+    s3:
+      existingSecret: ""
+      bucketName: ""
+      endpointUrl: ""
+      region_name: ""
+    gcs: {}
+
+nodestore:
+  # "" => default (uses filestore/db). "s3" installs sentry-nodestore-s3.
+  backend: ""
+  s3:
+    existingSecret: ""
+    accessKey: ""
+    secretKey: ""
+    bucketName: nodestore
+    endpointUrl: ""
+    region_name: ""
+
+mail:
+  enabled: false
+  host: ""
+  port: 587
+  username: ""
+  password: ""
+  existingSecret: ""
+  useTls: true
+  useSsl: false
+  from: ""
+
+# -----------------------------------------------------------------------------
+# Routing (bundled nginx proxy) + optional Ingress
+# -----------------------------------------------------------------------------
+nginx:
+  # Bundled routing proxy that does the relay/web regex split (single ClusterIP).
+  enabled: true
+  image:
+    repository: nginx
+    tag: 1.31.0-alpine
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  clientMaxBodySize: 100m
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+
+ingress:
+  # Optional networking.k8s.io/v1 Ingress that forwards / to the nginx proxy.
+  enabled: false
+  className: ""
+  annotations: {}
+  hostname: ""
+  path: /
+  pathType: Prefix
+  tls: []
