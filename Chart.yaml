@@ -7,7 +7,7 @@ description: >-
   Pulumi- and Terraform-friendly.
 type: application
 # Chart version is independent of the Sentry app version.
-version: 0.1.0
+version: 0.1.1
 # renovate image=ghcr.io/getsentry/sentry
 # All getsentry images default to this tag for cross-service compatibility.
 appVersion: "26.5.0"
@@ -18,9 +18,9 @@ keywords:
   - clickhouse
   - snuba
   - self-hosted
-home: https://github.com/getsentry/self-hosted
+home: https://github.com/sprisa/sentry-k8s
 sources:
-  - https://github.com/getsentry/self-hosted
+  - https://github.com/sprisa/sentry-k8s
 maintainers:
   - name: sentry-k8s
 annotations:

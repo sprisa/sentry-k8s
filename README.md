@@ -30,20 +30,32 @@ A self-contained Helm chart for **Sentry self-hosted** on Kubernetes, with a
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for what each component does and how
 requests/data flow through the system.
 
-## Quickstart
+## Install
+
+The chart is published as an **OCI artifact** to GitHub Container Registry.
 
 ```bash
-# Vendored subcharts (postgresql/redis/kafka/memcached) are NOT committed.
-# This pulls the exact versions pinned in Chart.lock into charts/.
-helm dependency build ./sentry-k8s
-
-helm install sentry ./sentry-k8s \
+helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
   --namespace sentry --create-namespace \
   --set sentry.system.url=https://sentry.example.com \
   --set user.email=admin@example.com \
   --set user.password=changeme-please \
   --set global.storageClass=longhorn
 ```
+
+Browse available versions: `helm show chart oci://ghcr.io/sprisa/sentry-k8s`.
+
+Use a profile preset (recommended over `--set` for anything non-trivial):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/sprisa/sentry-k8s/main/examples/values-feature-complete.yaml
+helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
+  -n sentry --create-namespace -f values-feature-complete.yaml
+```
+
+> **Pulumi / Terraform** consume the same OCI URL directly — see
+> [Using it from Pulumi](#using-it-from-pulumi) and
+> [Using it from Terraform](#using-it-from-terraform).
 
 The bootstrap `Job` runs migrations with no hooks. On a fresh install some app
 pods may restart a few times until it finishes — this is expected (see
@@ -71,7 +83,8 @@ component also has its own `enabled` flag, so you can build intermediate sets.
 | **Feature complete** | `feature-complete` | Full parity: replays, metrics, profiling, EAP, monitors, uptime, spans, launchpad, vroom | [`examples/values-feature-complete.yaml`](./examples/values-feature-complete.yaml) |
 
 ```bash
-helm install sentry ./sentry-k8s -n sentry -f examples/values-errors-transactions.yaml
+helm install sentry oci://ghcr.io/sprisa/sentry-k8s --version 0.1.0 \
+  -n sentry --create-namespace -f examples/values-errors-transactions.yaml
 ```
 
 To build errors + transactions on top of the default `errors-only` profile, turn
@@ -193,7 +206,8 @@ deploys.
 import * as k8s from "@pulumi/kubernetes";
 
 const sentry = new k8s.helm.v3.Chart("sentry", {
-  path: "./sentry-k8s",          // or fetchOpts/repo for a packaged chart
+  chart: "oci://ghcr.io/sprisa/sentry-k8s",
+  version: "0.1.0",
   namespace: "sentry",
   values: {
     sentry: { profile: "errors-only", system: { url: "https://sentry.example.com" } },
@@ -221,7 +235,8 @@ resource "helm_release" "sentry" {
   name             = "sentry"
   namespace        = "sentry"
   create_namespace = true
-  chart            = "./sentry-k8s"
+  chart            = "oci://ghcr.io/sprisa/sentry-k8s"
+  version          = "0.1.0"
 
   values = [yamlencode({
     sentry     = { profile = "errors-only", system = { url = "https://sentry.example.com" } }
@@ -247,3 +262,46 @@ Highlights:
   `external*` counterparts
 - `filestore` / `replay` / `nodestore` / `mail` storage backends
 - `nginx` routing proxy and the optional `ingress`
+
+## Development & releasing (maintainers)
+
+Common workflows are wrapped in a [Taskfile](./Taskfile.yml) (install
+[go-task](https://taskfile.dev): `brew install go-task`). Run `task` to list
+them:
+
+| Task | What it does |
+| --- | --- |
+| `task deps` | Pull pinned dependencies from `Chart.lock` into `charts/` (extracted, as Helm v4 needs) |
+| `task lint` | `helm lint` |
+| `task template EXAMPLE=feature-complete` | Render one profile |
+| `task test-render` | Render all example profiles to confirm they template cleanly |
+| `task package` | Package the versioned `.tgz` (vendors dependencies) |
+| `task login` | `helm registry login ghcr.io` (needs `GHCR_TOKEN`) |
+| `task publish` | Package + push to `oci://ghcr.io/sprisa` **and** cut a GitHub Release with auto-generated notes |
+| `task pull-check` | Verify the published version is publicly pullable |
+
+Cutting a release:
+
+```bash
+# 1. bump `version:` in Chart.yaml (and `appVersion:` if the Sentry version changed),
+#    then COMMIT AND PUSH to main — `gh release create` tags the remote's HEAD.
+git commit -am "release: v0.2.0" && git push
+
+# 2. authenticate: Helm to GHCR (PAT w/ write:packages) + the GitHub CLI for the release
+export GHCR_TOKEN=ghp_xxx          # and GHCR_USER=<your-gh-login> if it isn't `sprisa`
+task login
+gh auth login                      # one-time; needed for the GitHub Release step
+
+# 3. push the OCI artifact + create the tagged GitHub Release (notes auto-generated)
+task publish
+```
+
+`task publish` pushes `ghcr.io/sprisa/sentry-k8s:<version>`, then runs
+`gh release create v<version> … --generate-notes` to tag the commit, publish
+release notes, and attach the packaged `.tgz`. Version is driven entirely by
+`Chart.yaml`; no `gh-pages`/`index.yaml` to maintain.
+
+The **first** publish creates a *private* GHCR package. Make it public once at
+`https://github.com/users/sprisa/packages/container/sentry-k8s/settings` so
+anonymous `helm install oci://…` works. Versioning is driven entirely by
+`Chart.yaml`; there is no `gh-pages` branch or `index.yaml` to maintain.

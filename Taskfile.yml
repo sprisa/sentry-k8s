@@ -1,0 +1,110 @@
+# Taskfile for the sentry-k8s Helm chart.
+# Install go-task: https://taskfile.dev/installation/  (brew install go-task)
+# Run `task` (or `task --list`) to see available commands.
+version: "3"
+
+vars:
+  CHART: sentry-k8s
+  OWNER: sprisa
+  REGISTRY: ghcr.io
+  # OCI repo the chart is pushed to: oci://ghcr.io/sprisa
+  OCI_REPO: oci://{{.REGISTRY}}/{{.OWNER}}
+  NAMESPACE: sentry
+  PKG_DIR: .cr-release-packages
+  # Chart version is read straight from Chart.yaml so it stays the source of truth.
+  CHART_VERSION:
+    sh: awk '/^version:/ {print $2; exit}' Chart.yaml
+  # Git tag / GitHub release name for this chart version.
+  TAG: v{{.CHART_VERSION}}
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  deps:
+    desc: Fetch dependencies (Chart.lock) into charts/ as extracted dirs
+    # Helm v4's `template`/`package` require dependencies as extracted directories,
+    # not .tgz, so we unpack and drop the tarballs. charts/ is gitignored either way.
+    # Bumping a dep? Run `task clean deps` to force a refresh.
+    cmds:
+      - helm dependency build .
+      - |
+        cd charts
+        for f in *.tgz; do [ -e "$f" ] || continue; tar xzf "$f"; rm -f "$f"; done
+    status:
+      - test -d charts/postgresql -a -d charts/redis -a -d charts/kafka -a -d charts/memcached
+
+  lint:
+    desc: Lint the chart
+    deps: [deps]
+    cmds:
+      - helm lint .
+
+  template:
+    desc: 'Render one profile (EXAMPLE=errors-only|errors-transactions|feature-complete)'
+    deps: [deps]
+    vars:
+      EXAMPLE: '{{.EXAMPLE | default "errors-only"}}'
+    cmds:
+      - helm template {{.CHART}} . -n {{.NAMESPACE}} -f examples/values-{{.EXAMPLE}}.yaml
+
+  test-render:
+    desc: Render every example profile to confirm they all template cleanly
+    deps: [deps]
+    cmds:
+      - for: ["errors-only", "errors-transactions", "feature-complete"]
+        cmd: helm template {{.CHART}} . -n {{.NAMESPACE}} -f examples/values-{{.ITEM}}.yaml > /dev/null && echo "OK  {{.ITEM}}"
+
+  package:
+    desc: Package the chart into a versioned .tgz (vendors dependencies)
+    deps: [deps]
+    cmds:
+      - mkdir -p {{.PKG_DIR}}
+      - helm package . --destination {{.PKG_DIR}}
+      - 'echo "Packaged {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz"'
+
+  login:
+    desc: Log in to ghcr.io (needs $GHCR_TOKEN with write:packages; user = $GHCR_USER or your GH login)
+    preconditions:
+      - sh: '[ -n "$GHCR_TOKEN" ]'
+        msg: "Set GHCR_TOKEN to a GitHub PAT with write:packages, e.g. export GHCR_TOKEN=ghp_..."
+    cmds:
+      - echo "$GHCR_TOKEN" | helm registry login {{.REGISTRY}} -u "${GHCR_USER:-{{.OWNER}}}" --password-stdin
+
+  publish:
+    desc: Push the chart to ghcr.io (OCI) and cut a GitHub Release (run `task login` first)
+    deps: [package]
+    preconditions:
+      - sh: command -v gh >/dev/null
+        msg: "GitHub CLI not found. Install it: https://cli.github.com (brew install gh)"
+      - sh: gh auth status >/dev/null 2>&1
+        msg: "Not logged in to GitHub CLI. Run: gh auth login"
+    cmds:
+      - helm push {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz {{.OCI_REPO}}
+      - 'echo "Published {{.OCI_REPO}}/{{.CHART}}:{{.CHART_VERSION}}"'
+      # Create the GitHub Release with auto-generated notes, tagging the current
+      # default-branch HEAD as {{.TAG}} and attaching the packaged chart.
+      - >-
+        gh release create {{.TAG}}
+        {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz
+        --repo {{.OWNER}}/{{.CHART}}
+        --title "{{.CHART}} {{.CHART_VERSION}}"
+        --generate-notes
+      - 'echo "Released {{.TAG}}: https://github.com/{{.OWNER}}/{{.CHART}}/releases/tag/{{.TAG}}"'
+      - 'echo "NOTE: first publish creates a PRIVATE GHCR package. Make it public at:"'
+      - 'echo "  https://github.com/users/{{.OWNER}}/packages/container/{{.CHART}}/settings"'
+
+  pull-check:
+    desc: Sanity-check that the published chart is publicly pullable
+    cmds:
+      - helm show chart {{.OCI_REPO}}/{{.CHART}} --version {{.CHART_VERSION}}
+
+  clean:
+    desc: Remove packaged artifacts and vendored dependencies
+    cmds:
+      - rm -rf {{.PKG_DIR}}
+      - rm -rf charts/postgresql charts/redis charts/kafka charts/memcached
+      - rm -f charts/*.tgz

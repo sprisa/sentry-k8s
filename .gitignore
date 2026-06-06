@@ -1,4 +1,10 @@
 # Vendored Helm dependencies are regenerated from Chart.lock via
-# `helm dependency build`. Commit Chart.lock, not the tarballs.
+# `task deps` (helm dependency build). Commit Chart.lock, not the tarballs/dirs.
 charts/
 *.tgz
+
+# Packaged chart artifacts produced by `task package` / `task publish`.
+.cr-release-packages/
+
+# go-task local checksum cache.
+.task/
