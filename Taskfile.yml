@@ -85,17 +85,24 @@ tasks:
     cmds:
       - helm push {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz {{.OCI_REPO}}
       - 'echo "Published {{.OCI_REPO}}/{{.CHART}}:{{.CHART_VERSION}}"'
-      # Create the GitHub Release with auto-generated notes, tagging the current
-      # default-branch HEAD as {{.TAG}} and attaching the packaged chart.
+      # Build git-cliff-style notes from Conventional Commits since the last tag,
+      # then cut the GitHub Release: tag the default-branch HEAD as {{.TAG}} and
+      # attach the packaged chart.
+      - ./scripts/release-notes.sh {{.TAG}} {{.OWNER}}/{{.CHART}} > {{.PKG_DIR}}/RELEASE_NOTES.md
       - >-
         gh release create {{.TAG}}
         {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz
         --repo {{.OWNER}}/{{.CHART}}
-        --title "{{.CHART_VERSION}}"
-        --generate-notes
+        --title "{{.CHART}} {{.CHART_VERSION}}"
+        --notes-file {{.PKG_DIR}}/RELEASE_NOTES.md
       - 'echo "Released {{.TAG}}: https://github.com/{{.OWNER}}/{{.CHART}}/releases/tag/{{.TAG}}"'
       - 'echo "NOTE: first publish creates a PRIVATE GHCR package. Make it public at:"'
       - 'echo "  https://github.com/users/{{.OWNER}}/packages/container/{{.CHART}}/settings"'
+
+  notes:
+    desc: Preview the release notes that `task publish` would generate for this version
+    cmds:
+      - ./scripts/release-notes.sh {{.TAG}} {{.OWNER}}/{{.CHART}}
 
   pull-check:
     desc: Sanity-check that the published chart is publicly pullable

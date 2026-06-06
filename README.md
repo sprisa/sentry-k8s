@@ -277,8 +277,14 @@ them:
 | `task test-render` | Render all example profiles to confirm they template cleanly |
 | `task package` | Package the versioned `.tgz` (vendors dependencies) |
 | `task login` | `helm registry login ghcr.io` (needs `GHCR_TOKEN`) |
-| `task publish` | Package + push to `oci://ghcr.io/sprisa` **and** cut a GitHub Release with auto-generated notes |
+| `task notes` | Preview the changelog `task publish` will generate for this version |
+| `task publish` | Package + push to `oci://ghcr.io/sprisa` **and** cut a GitHub Release with grouped notes |
 | `task pull-check` | Verify the published version is publicly pullable |
+
+Release notes are generated from **Conventional Commits** since the previous
+`v*` tag by [`scripts/release-notes.sh`](./scripts/release-notes.sh) (git-cliff
+style: grouped by `feat`/`fix`/… with commit links, and squash-merged `(#123)`
+PR refs turned into links). Preview them anytime with `task notes`.
 
 Cutting a release:
 
@@ -297,9 +303,9 @@ task publish
 ```
 
 `task publish` pushes `ghcr.io/sprisa/sentry-k8s:<version>`, then runs
-`gh release create v<version> … --generate-notes` to tag the commit, publish
-release notes, and attach the packaged `.tgz`. Version is driven entirely by
-`Chart.yaml`; no `gh-pages`/`index.yaml` to maintain.
+`gh release create v<version>` with notes built from Conventional Commits to tag
+the commit, publish the changelog, and attach the packaged `.tgz`. Version is
+driven entirely by `Chart.yaml`; no `gh-pages`/`index.yaml` to maintain.
 
 The **first** publish creates a *private* GHCR package. Make it public once at
 `https://github.com/users/sprisa/packages/container/sentry-k8s/settings` so
