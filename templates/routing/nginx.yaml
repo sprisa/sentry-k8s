@@ -40,10 +40,18 @@ data:
       proxy_busy_buffers_size    256k;
       real_ip_header X-Forwarded-For;
       real_ip_recursive on;
+      # Honor an upstream X-Forwarded-Proto when present (e.g. behind Contour /
+      # Envoy / an ALB that terminates TLS), otherwise fall back to $scheme.
+      # Without this, a TLS-terminating proxy in front would have its "https"
+      # clobbered to "http" and Sentry would treat the request as insecure.
+      map $http_x_forwarded_proto $sentry_forwarded_proto {
+        default $scheme;
+        "~.+"   $http_x_forwarded_proto;
+      }
       proxy_set_header Connection '';
       proxy_set_header Host $host;
       proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-Proto $sentry_forwarded_proto;
       proxy_set_header X-Request-Id $request_id;
       proxy_read_timeout 30s;
       proxy_send_timeout 5s;
