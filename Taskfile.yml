@@ -93,7 +93,7 @@ tasks:
         gh release create {{.TAG}}
         {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz
         --repo {{.OWNER}}/{{.CHART}}
-        --title "{{.CHART}} {{.CHART_VERSION}}"
+        --title "{{.CHART_VERSION}}"
         --notes-file {{.PKG_DIR}}/RELEASE_NOTES.md
       - 'echo "Released {{.TAG}}: https://github.com/{{.OWNER}}/{{.CHART}}/releases/tag/{{.TAG}}"'
       - 'echo "NOTE: first publish creates a PRIVATE GHCR package. Make it public at:"'
