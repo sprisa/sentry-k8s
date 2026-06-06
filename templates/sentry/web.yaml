@@ -34,18 +34,7 @@ spec:
       {{- end }}
       initContainers:
         {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka" "redis" "postgres")) | nindent 8 }}
-        {{- if eq .Values.nodestore.backend "s3" }}
-        - name: install-nodestore-s3
-          image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
-          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
-          command: ["pip", "install", "--user", "sentry-nodestore-s3"]
-          env:
-            - name: PYTHONUSERBASE
-              value: /data/custom-packages
-          volumeMounts:
-            - name: sentry-data
-              mountPath: /data
-        {{- end }}
+        {{- include "sentry.pipInstallInit" . | nindent 8 }}
       containers:
         - name: web
           image: "{{ include "sentry.image" (dict "root" . "key" "sentry" "override" $c.image) }}"

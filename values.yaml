@@ -118,6 +118,13 @@ sentry:
   # Extra config.yml keys (map merged into config.yml)
   configYml: {}
 
+  # Extra pip packages installed into PYTHONUSERBASE (/data/custom-packages) via
+  # an init container on every Sentry-image pod, instead of baking a custom
+  # image. Useful for auth plugins, e.g. SSO with an OIDC provider:
+  #   extraPipPackages: ["sentry-auth-oidc==9.1.1"]
+  # then wire the OIDC_* settings via sentry.config (see README "SSO").
+  extraPipPackages: []
+
   web:
     enabled: true
     replicas: 1

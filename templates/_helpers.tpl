@@ -227,6 +227,41 @@ Uses busybox nc to block until each dependency accepts TCP connections.
 {{- end }}
 {{- end -}}
 
+{{/*
+Init container that pip-installs extra Python packages into PYTHONUSERBASE
+(/data/custom-packages, on the sentry-data volume). Combines the nodestore-s3
+backend requirement with any user-supplied .Values.sentry.extraPipPackages
+(e.g. "sentry-auth-oidc" for SSO). Renders nothing when there is nothing to
+install. Only meaningful for Sentry-image pods. Input: $ (root).
+*/}}
+{{- define "sentry.pipInstallInit" -}}
+{{- $pkgs := list -}}
+{{- if eq .Values.nodestore.backend "s3" -}}
+{{- $pkgs = append $pkgs "sentry-nodestore-s3" -}}
+{{- end -}}
+{{- range .Values.sentry.extraPipPackages -}}
+{{- $pkgs = append $pkgs . -}}
+{{- end -}}
+{{- if $pkgs }}
+- name: install-pip-packages
+  image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
+  imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+  command:
+    - pip
+    - install
+    - --user
+    {{- range $pkgs }}
+    - {{ . | quote }}
+    {{- end }}
+  env:
+    - name: PYTHONUSERBASE
+      value: /data/custom-packages
+  volumeMounts:
+    - name: sentry-data
+      mountPath: /data
+{{- end }}
+{{- end -}}
+
 {{/* ---------- Standard env blocks ---------- */}}
 
 {{/* Env for Sentry-image workloads. Input: $ (root). */}}

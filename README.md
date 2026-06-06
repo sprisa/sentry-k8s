@@ -182,6 +182,44 @@ mail:
   from: sentry@example.com
 ```
 
+## SSO (OIDC, e.g. Clerk / Okta / Auth0)
+
+Sentry self-hosted gets SSO through the generic [`sentry-auth-oidc`](https://github.com/siemens/sentry-auth-oidc)
+plugin. You can install it without baking a custom image via `sentry.extraPipPackages`,
+then point it at your IdP from `sentry.config`:
+
+```yaml
+sentry:
+  # Installed into PYTHONUSERBASE on every Sentry pod by an init container.
+  extraPipPackages:
+    - "sentry-auth-oidc==9.1.1"
+  config: |
+    import os
+    OIDC_ISSUER = "Clerk"
+    OIDC_SCOPE = "openid email profile"
+    OIDC_DOMAIN = "https://clerk.example.com"   # plugin appends /.well-known/openid-configuration
+    OIDC_CLIENT_ID = os.environ["OIDC_CLIENT_ID"]
+    OIDC_CLIENT_SECRET = os.environ["OIDC_CLIENT_SECRET"]
+  web:
+    env:
+      - name: OIDC_CLIENT_ID
+        valueFrom: { secretKeyRef: { name: sentry-oidc, key: client-id } }
+      - name: OIDC_CLIENT_SECRET
+        valueFrom: { secretKeyRef: { name: sentry-oidc, key: client-secret } }
+```
+
+On the IdP side, register an OAuth/OIDC client with redirect URI
+`https://<your-sentry-host>/auth/sso/` and the `openid email profile` scopes.
+After deploy, log in as the bootstrap admin and finish linking under
+**Org Settings → Auth**. (`OIDC_DOMAIN` must serve `/.well-known/openid-configuration`;
+if your provider doesn't, set `OIDC_AUTHORIZATION_ENDPOINT` / `OIDC_TOKEN_ENDPOINT` /
+`OIDC_USERINFO_ENDPOINT` / `OIDC_ISSUER` explicitly instead.)
+
+`extraPipPackages` installs at pod startup, which slows starts and requires
+network access from the pods; for air-gapped or latency-sensitive setups, bake a
+custom image (`FROM ghcr.io/getsentry/sentry:<appVersion>` + `pip install`) and
+set `images.sentry.repository`/`tag` instead.
+
 ## Image versioning
 
 `Chart.yaml` `appVersion` (`26.5.0`) is the single coherent Sentry version. All

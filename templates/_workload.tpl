@@ -49,17 +49,8 @@ spec:
       {{- include "sentry.scheduling" (dict "root" $root "component" $c) | nindent 6 }}
       initContainers:
         {{- include "sentry.waitForInfra" (dict "root" $root "deps" $deps) | nindent 8 }}
-        {{- if and (not $isSnuba) (eq $root.Values.nodestore.backend "s3") }}
-        - name: install-nodestore-s3
-          image: "{{ include "sentry.image" (dict "root" $root "key" "sentry") }}"
-          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" $root "key" "sentry") }}
-          command: ["pip", "install", "--user", "sentry-nodestore-s3"]
-          env:
-            - name: PYTHONUSERBASE
-              value: /data/custom-packages
-          volumeMounts:
-            - name: sentry-data
-              mountPath: /data
+        {{- if not $isSnuba }}
+        {{- include "sentry.pipInstallInit" $root | nindent 8 }}
         {{- end }}
       containers:
         - name: {{ .name }}
