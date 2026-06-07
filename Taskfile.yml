@@ -24,28 +24,13 @@ tasks:
       - task --list
     silent: true
 
-  deps:
-    desc: Fetch dependencies (Chart.lock) into charts/ as extracted dirs
-    # Helm v4's `template`/`package` require dependencies as extracted directories,
-    # not .tgz, so we unpack and drop the tarballs. charts/ is gitignored either way.
-    # Bumping a dep? Run `task clean deps` to force a refresh.
-    cmds:
-      - helm dependency build .
-      - |
-        cd charts
-        for f in *.tgz; do [ -e "$f" ] || continue; tar xzf "$f"; rm -f "$f"; done
-    status:
-      - test -d charts/postgresql -a -d charts/redis -a -d charts/kafka -a -d charts/memcached
-
   lint:
     desc: Lint the chart
-    deps: [deps]
     cmds:
       - helm lint .
 
   template:
     desc: 'Render one example preset (EXAMPLE=errors-only|errors-transactions|feature-complete)'
-    deps: [deps]
     vars:
       EXAMPLE: '{{.EXAMPLE | default "errors-only"}}'
     cmds:
@@ -53,14 +38,12 @@ tasks:
 
   test-render:
     desc: Render every example preset to confirm they all template cleanly
-    deps: [deps]
     cmds:
       - for: ["errors-only", "errors-transactions", "feature-complete"]
         cmd: helm template {{.CHART}} . -n {{.NAMESPACE}} -f examples/values-{{.ITEM}}.yaml > /dev/null && echo "OK  {{.ITEM}}"
 
   package:
-    desc: Package the chart into a versioned .tgz (vendors dependencies)
-    deps: [deps]
+    desc: Package the chart into a versioned .tgz
     cmds:
       - mkdir -p {{.PKG_DIR}}
       - helm package . --destination {{.PKG_DIR}}
@@ -110,8 +93,6 @@ tasks:
       - helm show chart {{.OCI_REPO}}/{{.CHART}} --version {{.CHART_VERSION}}
 
   clean:
-    desc: Remove packaged artifacts and vendored dependencies
+    desc: Remove packaged artifacts
     cmds:
       - rm -rf {{.PKG_DIR}}
-      - rm -rf charts/postgresql charts/redis charts/kafka charts/memcached
-      - rm -f charts/*.tgz

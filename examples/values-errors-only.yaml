@@ -7,7 +7,8 @@
 # preset just leaves the transaction/replay/metrics/profiling ones off.
 
 global:
-  # Propagated to ClickHouse PVCs and the Bitnami Postgres/Redis/Kafka subcharts.
+  # Default storageClass for all bundled stateful workloads (ClickHouse, Postgres,
+  # Redis, Kafka).
   storageClass: longhorn
 
 sentry:

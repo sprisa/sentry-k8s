@@ -132,10 +132,19 @@ flowchart TD
   --create-kafka-topics`, and creates the initial superuser.
 
 ### Datastores
-- **ClickHouse** — bundled, first-class StatefulSet (no Altinity operator).
-  Optional ClickHouse Keeper + sharding/replication for HA.
-- **PostgreSQL**, **Kafka** (KRaft), **Redis**, **Memcached** — bundled Bitnami
-  subcharts, each replaceable by an external/managed service.
+All datastores are **bundled, first-class in-tree templates** (no Bitnami or
+other subcharts); each is replaceable by an external/managed service via its
+`external*` block. Images match Sentry self-hosted and default to single-node.
+- **ClickHouse** — first-class StatefulSet (no Altinity operator). Optional
+  ClickHouse Keeper + sharding/replication for HA.
+- **PostgreSQL** (`postgres:16`) — single-node StatefulSet, password auth. Source
+  of truth; for HA use a managed/operator Postgres via `externalPostgresql`.
+- **Kafka** (`cp-kafka`, KRaft) — single-node by default; set `kafka.replicas`
+  (odd) + `replicationFactor`/`minInsyncReplicas` for a multi-broker HA cluster.
+- **Redis** (`redis:6.2.x`) — standalone by default; `replication` + `sentinel`
+  enable HA. In Sentinel mode an HAProxy `role:master` router backs the
+  `-redis-master` Service so non-Sentinel-aware clients (Snuba) follow failover.
+- **Memcached** (`memcached:1.6.x`) — single-node pure cache.
 
 ## Initialization without Helm hooks
 

@@ -1,0 +1,51 @@
+{{- if .Values.redis.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $sentinel := .Values.redis.sentinel.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-redis-headless
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+    {{- if $sentinel }}
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+    {{- end }}
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-redis-master
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    {{- include "sentry.selectorLabels" . | nindent 4 }}
+    {{- if $sentinel }}
+    # With Sentinel the master can move; route through the HAProxy master-detector.
+    app.kubernetes.io/component: redis-haproxy
+    {{- else }}
+    # Single master is always pod-0 (standalone or replication without failover).
+    app.kubernetes.io/component: redis
+    statefulset.kubernetes.io/pod-name: {{ $fullname }}-redis-0
+    {{- end }}
+{{- end }}

@@ -102,7 +102,7 @@ Component-level override of repository/tag wins; tag falls back to Chart.AppVers
 
 {{- define "sentry.redis.host" -}}
 {{- if .Values.redis.enabled -}}
-{{- printf "%s-redis-master" .Release.Name -}}
+{{- printf "%s-redis-master" (include "sentry.fullname" .) -}}
 {{- else -}}
 {{- .Values.externalRedis.host -}}
 {{- end -}}
@@ -112,18 +112,25 @@ Component-level override of repository/tag wins; tag falls back to Chart.AppVers
 {{- if .Values.redis.enabled -}}6379{{- else -}}{{ .Values.externalRedis.port | default 6379 }}{{- end -}}
 {{- end -}}
 
+{{/* Bundled-Redis password secret (only consulted when redis.auth.enabled). */}}
+{{- define "sentry.redis.secretName" -}}
+{{- if .Values.redis.auth.existingSecret -}}{{ .Values.redis.auth.existingSecret }}{{- else -}}{{ include "sentry.secretName" . }}{{- end -}}
+{{- end -}}
+
+{{- define "sentry.redis.secretKey" -}}
+{{- if .Values.redis.auth.existingSecret -}}{{ .Values.redis.auth.existingSecretKey | default "redis-password" }}{{- else -}}redis-password{{- end -}}
+{{- end -}}
+
 {{- define "sentry.postgres.host" -}}
-{{- if .Values.pgbouncer.enabled -}}
-{{- printf "%s-pgbouncer" (include "sentry.fullname" .) -}}
-{{- else if .Values.postgresql.enabled -}}
-{{- printf "%s-postgresql" .Release.Name -}}
+{{- if .Values.postgresql.enabled -}}
+{{- printf "%s-postgresql" (include "sentry.fullname" .) -}}
 {{- else -}}
 {{- .Values.externalPostgresql.host -}}
 {{- end -}}
 {{- end -}}
 
 {{- define "sentry.postgres.port" -}}
-{{- if .Values.pgbouncer.enabled -}}5432{{- else if .Values.postgresql.enabled -}}5432{{- else -}}{{ .Values.externalPostgresql.port | default 5432 }}{{- end -}}
+{{- if .Values.postgresql.enabled -}}5432{{- else -}}{{ .Values.externalPostgresql.port | default 5432 }}{{- end -}}
 {{- end -}}
 
 {{- define "sentry.postgres.database" -}}
@@ -134,9 +141,18 @@ Component-level override of repository/tag wins; tag falls back to Chart.AppVers
 {{- if .Values.postgresql.enabled -}}{{ .Values.postgresql.auth.username | default "postgres" }}{{- else -}}{{ .Values.externalPostgresql.username | default "postgres" }}{{- end -}}
 {{- end -}}
 
+{{/* Bundled-Postgres password secret. existingSecret overrides the generated one. */}}
+{{- define "sentry.postgres.secretName" -}}
+{{- if .Values.postgresql.auth.existingSecret -}}{{ .Values.postgresql.auth.existingSecret }}{{- else -}}{{ include "sentry.secretName" . }}{{- end -}}
+{{- end -}}
+
+{{- define "sentry.postgres.secretKey" -}}
+{{- if .Values.postgresql.auth.existingSecret -}}{{ .Values.postgresql.auth.existingSecretKey | default "postgres-password" }}{{- else -}}postgres-password{{- end -}}
+{{- end -}}
+
 {{- define "sentry.kafka.bootstrap" -}}
 {{- if .Values.kafka.enabled -}}
-{{- printf "%s-kafka:9092" .Release.Name -}}
+{{- printf "%s-kafka:9092" (include "sentry.fullname" .) -}}
 {{- else -}}
 {{- $hosts := list -}}
 {{- range .Values.externalKafka.brokers -}}
@@ -148,7 +164,7 @@ Component-level override of repository/tag wins; tag falls back to Chart.AppVers
 
 {{- define "sentry.memcached.host" -}}
 {{- if .Values.memcached.enabled -}}
-{{- printf "%s-memcached:11211" .Release.Name -}}
+{{- printf "%s-memcached:11211" (include "sentry.fullname" .) -}}
 {{- else -}}
 memcached:11211
 {{- end -}}
@@ -281,8 +297,8 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
   valueFrom:
     secretKeyRef:
       {{- if .Values.postgresql.enabled }}
-      name: {{ .Release.Name }}-postgresql
-      key: postgres-password
+      name: {{ include "sentry.postgres.secretName" . }}
+      key: {{ include "sentry.postgres.secretKey" . }}
       {{- else if .Values.externalPostgresql.existingSecret }}
       name: {{ .Values.externalPostgresql.existingSecret }}
       key: password
@@ -294,6 +310,24 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
   value: {{ include "sentry.redis.host" . }}
 - name: SENTRY_REDIS_PORT
   value: {{ include "sentry.redis.port" . | quote }}
+{{- if and .Values.redis.enabled .Values.redis.auth.enabled }}
+- name: SENTRY_REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "sentry.redis.secretName" . }}
+      key: {{ include "sentry.redis.secretKey" . }}
+{{- else if and (not .Values.redis.enabled) (or .Values.externalRedis.password .Values.externalRedis.existingSecret) }}
+- name: SENTRY_REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      {{- if .Values.externalRedis.existingSecret }}
+      name: {{ .Values.externalRedis.existingSecret }}
+      key: password
+      {{- else }}
+      name: {{ include "sentry.secretName" . }}
+      key: external-redis-password
+      {{- end }}
+{{- end }}
 - name: SENTRY_MEMCACHED_HOST
   value: {{ include "sentry.memcached.host" . }}
 - name: SENTRY_KAFKA_BOOTSTRAP
@@ -365,6 +399,24 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
   value: {{ include "sentry.redis.host" . }}
 - name: REDIS_PORT
   value: {{ include "sentry.redis.port" . | quote }}
+{{- if and .Values.redis.enabled .Values.redis.auth.enabled }}
+- name: REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "sentry.redis.secretName" . }}
+      key: {{ include "sentry.redis.secretKey" . }}
+{{- else if and (not .Values.redis.enabled) (or .Values.externalRedis.password .Values.externalRedis.existingSecret) }}
+- name: REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      {{- if .Values.externalRedis.existingSecret }}
+      name: {{ .Values.externalRedis.existingSecret }}
+      key: password
+      {{- else }}
+      name: {{ include "sentry.secretName" . }}
+      key: external-redis-password
+      {{- end }}
+{{- end }}
 - name: SNUBA_SETTINGS_SINGLE_NODE
   value: {{ include "sentry.clickhouse.singleNode" . | quote }}
 - name: UWSGI_MAX_REQUESTS
@@ -406,6 +458,19 @@ nodeSelector:
 {{- if $c.affinity }}
 affinity:
   {{- toYaml $c.affinity | nindent 2 }}
+{{- else if .antiAffinityComponent }}
+{{- /* Default soft anti-affinity for HA datastores: spread replicas across
+       nodes (best-effort). Overridden entirely by an explicit component.affinity. */}}
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              {{- include "sentry.selectorLabels" $root | nindent 14 }}
+              app.kubernetes.io/component: {{ .antiAffinityComponent }}
 {{- end }}
 {{- if $c.tolerations }}
 tolerations:

@@ -32,7 +32,7 @@ spec:
     spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" . }}
       {{- include "sentry.imagePullSecrets" . | nindent 6 }}
-      {{- include "sentry.scheduling" (dict "root" . "component" .Values.clickhouse) | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" .Values.clickhouse "antiAffinityComponent" (ternary "clickhouse" "" $clustered)) | nindent 6 }}
       securityContext:
         fsGroup: 101
       {{- if $clustered }}

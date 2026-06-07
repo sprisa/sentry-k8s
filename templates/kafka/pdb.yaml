@@ -1,0 +1,23 @@
+{{- if and .Values.kafka.enabled .Values.kafka.pdb.enabled }}
+{{- $replicas := int (.Values.kafka.replicas | default 1) }}
+{{- if gt $replicas 1 }}
+{{- $fullname := include "sentry.fullname" . }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-kafka
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kafka
+spec:
+  {{- if .Values.kafka.pdb.minAvailable }}
+  minAvailable: {{ .Values.kafka.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.kafka.pdb.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kafka
+{{- end }}
+{{- end }}

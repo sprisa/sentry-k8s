@@ -1,0 +1,23 @@
+{{- if and .Values.clickhouse.enabled .Values.clickhouse.pdb.enabled }}
+{{- $count := mul (int .Values.clickhouse.layout.shardsCount) (int .Values.clickhouse.layout.replicasCount) }}
+{{- if gt $count 1 }}
+{{- $fullname := include "sentry.fullname" . }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-clickhouse
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  {{- if .Values.clickhouse.pdb.minAvailable }}
+  minAvailable: {{ .Values.clickhouse.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.clickhouse.pdb.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+{{- end }}
+{{- end }}

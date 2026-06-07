@@ -1,5 +1,3 @@
-# Vendored Helm dependencies are regenerated from Chart.lock via
-# `task deps` (helm dependency build). Commit Chart.lock, not the tarballs/dirs.
 charts/
 *.tgz
 

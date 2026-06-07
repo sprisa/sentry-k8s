@@ -12,7 +12,8 @@
 # Global / chart-wide
 # -----------------------------------------------------------------------------
 global:
-  # Propagated to ClickHouse PVCs and the Bitnami Postgres/Redis/Kafka subcharts.
+  # Default storageClass for all bundled stateful workloads (ClickHouse,
+  # Postgres, Redis, Kafka). Override per-component via <component>.persistence.storageClass.
   storageClass: ""
   # Default nodeSelector applied to chart-owned workloads (override per-component).
   nodeSelector: {}
@@ -391,6 +392,11 @@ clickhouse:
   tolerations: []
   podAnnotations: {}
   podLabels: {}
+  # PodDisruptionBudget (only created when clustered: shards*replicas > 1).
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+    minAvailable: ""
   service:
     annotations: {}
 
@@ -408,25 +414,51 @@ externalClickhouse:
   existingSecretKey: clickhouse-password
 
 # -----------------------------------------------------------------------------
-# Datastores (Bitnami subcharts) + external alternatives
+# Datastores (first-class in-tree templates) + external alternatives
+#
+# Postgres, Redis, Kafka and Memcached are rendered directly by this chart
+# (templates/{postgresql,redis,kafka,memcached}) using the same images Sentry
+# self-hosted ships. No Bitnami / external subcharts are involved. Each defaults
+# to single-node; HA toggles are documented per block. To use a managed/external
+# datastore instead, set `enabled: false` and fill the matching `external*` block.
 # -----------------------------------------------------------------------------
 kafka:
   enabled: true
-  # 50 MB message ceiling (matches docker-compose). Applied to broker + relay/sentry.
+  image:
+    repository: confluentinc/cp-kafka
+    tag: 7.6.6
+    pullPolicy: IfNotPresent
+  # Single-node KRaft by default. For HA set replicas to an odd number (e.g. 3)
+  # AND replicationFactor/minInsyncReplicas so auto-created topics are durable.
+  # NOTE: changing replicas after first boot requires manual KRaft quorum steps.
+  replicas: 1
+  replicationFactor: 1
+  minInsyncReplicas: 1
+  # KRaft cluster id (must be stable for the life of the cluster).
+  clusterId: "MkU3OEVBNTcwNTJENDM2Qk"
+  # 50 MB message ceiling (matches docker-compose; large events/sourcemaps).
   maxMessageBytes: 50000000
-  # Bitnami kafka passthrough
-  listeners:
-    client:
-      protocol: PLAINTEXT
-  controller:
-    replicaCount: 1
-  broker:
-    replicaCount: 0
-  extraConfig: |
-    message.max.bytes=50000000
-    replica.fetch.max.bytes=50000000
+  logRetentionHours: 24
+  logLevel: WARN
+  heapOpts: ""
+  # Extra raw KAFKA_* env (e.g. {KAFKA_NUM_PARTITIONS: "3"}).
+  extraEnv: {}
   persistence:
+    enabled: true
     size: 20Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  podLabels: {}
+  # PodDisruptionBudget (only created when replicas > 1).
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+    minAvailable: ""
 
 externalKafka:
   # When kafka.enabled=false, list brokers: [{ host: kafka, port: 9092 }]
@@ -434,12 +466,55 @@ externalKafka:
 
 redis:
   enabled: true
+  image:
+    repository: redis
+    # MUST stay 6.2.x: Sentry tracks Redis 6.2 (Redis 7 / Valkey have known
+    # incompatibilities). Overridable, but change at your own risk.
+    tag: 6.2.20-alpine
+    pullPolicy: IfNotPresent
+  # standalone (single node) | replication (pod-0 master + read replicas).
   architecture: standalone
+  # Used when architecture=replication or sentinel.enabled.
+  replicas: 3
   auth:
     enabled: false
-  master:
-    persistence:
-      size: 8Gi
+    password: ""
+    existingSecret: ""
+    existingSecretKey: redis-password
+  # HA via Redis Sentinel. Adds a sentinel sidecar per pod plus an HAProxy
+  # master-router so the single `-redis-master` endpoint always follows failover
+  # (Snuba's client is not Sentinel-aware, so a stable master VIP is required).
+  sentinel:
+    enabled: false
+    masterName: mymaster
+    quorum: 2
+    downAfterMilliseconds: 5000
+    failoverTimeout: 60000
+  haproxy:
+    replicas: 1
+    image:
+      repository: haproxy
+      tag: 2.9-alpine
+      pullPolicy: IfNotPresent
+    resources: {}
+  # Extra redis.conf lines appended verbatim.
+  config: ""
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  podLabels: {}
+  # PodDisruptionBudget (only created in HA mode: replication/sentinel, replicas > 1).
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+    minAvailable: ""
 
 externalRedis:
   host: ""
@@ -451,13 +526,37 @@ externalRedis:
 
 postgresql:
   enabled: true
+  image:
+    # Sentry requires Postgres >= 14; 16 chosen for a greenfield install.
+    repository: postgres
+    tag: "16"
+    pullPolicy: IfNotPresent
   auth:
     database: sentry
     username: postgres
-    postgresPassword: ""
-  primary:
-    persistence:
-      size: 20Gi
+    # Leave empty to auto-generate (preserved across upgrades). Or set
+    # existingSecret (+ existingSecretKey) to supply your own.
+    password: ""
+    existingSecret: ""
+    existingSecretKey: postgres-password
+  # Passed as `postgres -c max_connections=...`; bump for many workers.
+  maxConnections: 100
+  # /dev/shm size (parallel query / sort scratch).
+  shmSize: 256Mi
+  # Extra `postgres -c key=value` flags, e.g. ["-c", "shared_buffers=512MB"].
+  extraArgs: []
+  # Single-node only. For HA, use a managed/operator Postgres via externalPostgresql.
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  podLabels: {}
 
 externalPostgresql:
   host: ""
@@ -470,13 +569,24 @@ externalPostgresql:
 
 memcached:
   enabled: true
-  # Bitnami memcached passthrough
-  architecture: standalone
-
-pgbouncer:
-  enabled: false
-  replicas: 2
-  poolMode: transaction
+  image:
+    repository: memcached
+    tag: 1.6.26-alpine
+    pullPolicy: IfNotPresent
+  # Pure cache (regenerable). >1 replica behind one VIP is NOT real sharding;
+  # keep at 1 unless you add client-side multi-host config. Single-node by design.
+  replicaCount: 1
+  # Max memory for the cache, in MB.
+  memoryLimitMb: 64
+  # Max item size; matches docker-compose `-I 1M` (sourcemap upload ceiling).
+  maxItemSize: "1m"
+  extraArgs: []
+  resources: {}
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  podAnnotations: {}
+  podLabels: {}
 
 # -----------------------------------------------------------------------------
 # Storage backends (filestore / replay / nodestore / mail)

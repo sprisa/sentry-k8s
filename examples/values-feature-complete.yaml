@@ -134,12 +134,31 @@ nodestore:
     endpointUrl: https://<account>.r2.cloudflarestorage.com
     region_name: auto
 
+# Datastores: this preset demonstrates the bundled HA toggles. Drop these blocks
+# to run everything single-node, or point external* at managed services instead.
 kafka:
   enabled: true
+  # Multi-broker KRaft. replicas must be odd (controller quorum); RF/minISR make
+  # auto-created topics durable across broker loss.
+  replicas: 3
+  replicationFactor: 3
+  minInsyncReplicas: 2
+  persistence:
+    size: 50Gi
+
 postgresql:
   enabled: true
-  primary:
-    persistence:
-      size: 50Gi
+  # Single-node by design. For real Postgres HA, set enabled:false and point
+  # externalPostgresql at a managed/operator cluster (RDS, CloudNativePG, ...).
+  maxConnections: 200
+  persistence:
+    size: 50Gi
+
 redis:
   enabled: true
+  # Sentinel HA: master + replicas + sentinels, fronted by an HAProxy master
+  # router so the -redis-master endpoint always follows failover.
+  architecture: replication
+  replicas: 3
+  sentinel:
+    enabled: true

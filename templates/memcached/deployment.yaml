@@ -1,0 +1,61 @@
+{{- if .Values.memcached.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-memcached
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: memcached
+spec:
+  replicas: {{ .Values.memcached.replicaCount | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: memcached
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: memcached
+        {{- with .Values.memcached.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- with .Values.memcached.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" .Values.memcached) | nindent 6 }}
+      containers:
+        - name: memcached
+          image: "{{ .Values.memcached.image.repository }}:{{ .Values.memcached.image.tag }}"
+          imagePullPolicy: {{ .Values.memcached.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - -m
+            - {{ .Values.memcached.memoryLimitMb | default 64 | quote }}
+            # Max item size; matches docker-compose `-I 1M` (sourcemap upload ceiling).
+            - -I
+            - {{ .Values.memcached.maxItemSize | default "1m" | quote }}
+            {{- range .Values.memcached.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: memcached
+              containerPort: 11211
+          livenessProbe:
+            tcpSocket:
+              port: memcached
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: memcached
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.memcached.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

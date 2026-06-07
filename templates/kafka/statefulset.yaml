@@ -1,0 +1,155 @@
+{{- if .Values.kafka.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $sc := .Values.kafka.persistence.storageClass | default .Values.global.storageClass }}
+{{- $replicas := int (.Values.kafka.replicas | default 1) }}
+{{- /* KRaft controller quorum: one voter per pod, node id = ordinal + 1001. */}}
+{{- $voters := list }}
+{{- range $i := until $replicas }}
+{{- $voters = append $voters (printf "%d@%s-kafka-%d.%s-kafka-headless.%s.svc.cluster.local:29093" (add 1001 $i) $fullname $i $fullname $.Release.Namespace) }}
+{{- end }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-kafka
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kafka
+spec:
+  serviceName: {{ $fullname }}-kafka-headless
+  replicas: {{ $replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kafka
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: kafka
+        {{- with .Values.kafka.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- with .Values.kafka.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" .Values.kafka "antiAffinityComponent" (ternary "kafka" "" (gt $replicas 1))) | nindent 6 }}
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: kafka
+          image: "{{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}"
+          imagePullPolicy: {{ .Values.kafka.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              # Per-pod identity derived from the StatefulSet ordinal.
+              export KAFKA_NODE_ID=$(( ${HOSTNAME##*-} + 1001 ))
+              export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${HOSTNAME}.{{ $fullname }}-kafka-headless.{{ .Release.Namespace }}.svc.cluster.local:9092"
+              exec /etc/confluent/docker/run
+          env:
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: {{ join "," $voters | quote }}
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT"
+            - name: CLUSTER_ID
+              value: {{ .Values.kafka.clusterId | quote }}
+            - name: KAFKA_LOG_DIRS
+              value: /var/lib/kafka/data
+            # Replication / durability (set replicationFactor=3 + minInsyncReplicas=2 for HA).
+            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+              value: {{ .Values.kafka.replicationFactor | default 1 | quote }}
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: {{ .Values.kafka.replicationFactor | default 1 | quote }}
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: {{ .Values.kafka.replicationFactor | default 1 | quote }}
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: {{ .Values.kafka.minInsyncReplicas | default 1 | quote }}
+            - name: KAFKA_MIN_INSYNC_REPLICAS
+              value: {{ .Values.kafka.minInsyncReplicas | default 1 | quote }}
+            # 50 MB message ceiling (matches docker-compose; large events/sourcemaps).
+            - name: KAFKA_MESSAGE_MAX_BYTES
+              value: {{ .Values.kafka.maxMessageBytes | default 50000000 | quote }}
+            - name: KAFKA_MAX_REQUEST_SIZE
+              value: {{ .Values.kafka.maxMessageBytes | default 50000000 | quote }}
+            - name: KAFKA_REPLICA_FETCH_MAX_BYTES
+              value: {{ .Values.kafka.maxMessageBytes | default 50000000 | quote }}
+            - name: KAFKA_LOG_RETENTION_HOURS
+              value: {{ .Values.kafka.logRetentionHours | default 24 | quote }}
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "true"
+            - name: CONFLUENT_SUPPORT_METRICS_ENABLE
+              value: "false"
+            - name: KAFKA_LOG4J_ROOT_LOGLEVEL
+              value: {{ .Values.kafka.logLevel | default "WARN" | quote }}
+            - name: KAFKA_TOOLS_LOG4J_LOGLEVEL
+              value: {{ .Values.kafka.logLevel | default "WARN" | quote }}
+            {{- with .Values.kafka.heapOpts }}
+            - name: KAFKA_HEAP_OPTS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- range $k, $v := .Values.kafka.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          ports:
+            - name: client
+              containerPort: 9092
+            - name: controller
+              containerPort: 29093
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+          {{- with .Values.kafka.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- if not .Values.kafka.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.kafka.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sentry.labels" . | nindent 10 }}
+          app.kubernetes.io/component: kafka
+      spec:
+        accessModes:
+          - {{ .Values.kafka.persistence.accessMode | default "ReadWriteOnce" }}
+        {{- if $sc }}
+        storageClassName: {{ $sc | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.kafka.persistence.size }}
+  {{- end }}
+{{- end }}

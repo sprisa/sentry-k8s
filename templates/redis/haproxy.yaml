@@ -1,0 +1,112 @@
+{{- if and .Values.redis.enabled .Values.redis.sentinel.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $ns := .Release.Namespace }}
+{{- $headless := printf "%s-redis-headless.%s.svc.cluster.local" $fullname $ns }}
+{{- $replicas := int .Values.redis.replicas }}
+{{- $auth := .Values.redis.auth.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-redis-haproxy
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis-haproxy
+data:
+  haproxy.cfg: |
+    global
+      daemon
+      maxconn 4096
+      log stdout format raw local0
+    defaults
+      mode tcp
+      log global
+      option tcplog
+      timeout connect 4s
+      timeout client 30s
+      timeout server 30s
+      retries 3
+    frontend ft_redis
+      bind *:6379
+      default_backend bk_redis_master
+    backend bk_redis_master
+      # Route only to the node currently reporting role:master, so writes always
+      # follow Sentinel failover (works for non-Sentinel-aware clients like Snuba).
+      option tcp-check
+      tcp-check connect
+      {{- if $auth }}
+      tcp-check send AUTH\ "${REDIS_PASSWORD}"\r\n
+      tcp-check expect string +OK
+      {{- end }}
+      tcp-check send PING\r\n
+      tcp-check expect string +PONG
+      tcp-check send info\ replication\r\n
+      tcp-check expect string role:master
+      tcp-check send QUIT\r\n
+      tcp-check expect string +OK
+      {{- range $i := until $replicas }}
+      server redis-{{ $i }} {{ $fullname }}-redis-{{ $i }}.{{ $headless }}:6379 check inter 1s
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-redis-haproxy
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis-haproxy
+spec:
+  replicas: {{ .Values.redis.haproxy.replicas | default 1 }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis-haproxy
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis-haproxy
+      annotations:
+        checksum/config: {{ .Values.redis | toYaml | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" .Values.redis) | nindent 6 }}
+      containers:
+        - name: haproxy
+          image: "{{ .Values.redis.haproxy.image.repository }}:{{ .Values.redis.haproxy.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.haproxy.image.pullPolicy | default "IfNotPresent" }}
+          {{- if $auth }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sentry.redis.secretName" . }}
+                  key: {{ include "sentry.redis.secretKey" . }}
+          {{- end }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+          {{- with .Values.redis.haproxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-redis-haproxy
+{{- end }}

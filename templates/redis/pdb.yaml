@@ -1,0 +1,24 @@
+{{- if and .Values.redis.enabled .Values.redis.pdb.enabled }}
+{{- $useRepl := or (eq .Values.redis.architecture "replication") .Values.redis.sentinel.enabled }}
+{{- $replicas := ternary (int .Values.redis.replicas) 1 $useRepl }}
+{{- if gt $replicas 1 }}
+{{- $fullname := include "sentry.fullname" . }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  {{- if .Values.redis.pdb.minAvailable }}
+  minAvailable: {{ .Values.redis.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.redis.pdb.maxUnavailable | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+{{- end }}
+{{- end }}

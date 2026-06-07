@@ -1,5 +1,7 @@
 # sentry-k8s
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/sentry-k8s)](https://artifacthub.io/packages/search?repo=sentry-k8s)
+
 A self-contained Helm chart for **Sentry self-hosted** on Kubernetes, with a
 **first-class bundled ClickHouse** (no external provisioning) and every required service wired up. One `helm install` brings up the whole stack.
 
@@ -174,6 +176,62 @@ volumes.
   works if web/worker/cron pods are pinned to the same node (via `nodeSelector`).
   For multi-node you must use `ReadWriteMany`. Simplest to start, least HA.
 
+## Bundled datastores & HA
+
+Postgres, Redis, Kafka and Memcached are **first-class in-tree templates** (no
+Bitnami or other subcharts). They use the same images Sentry self-hosted ships
+and are overridable via each block's `image.repository` / `image.tag`:
+
+| Store | Image (default) | HA support | Default |
+| --- | --- | --- | --- |
+| **PostgreSQL** | `postgres:16` | single-node only — use `externalPostgresql` (managed/operator) for HA | single-node |
+| **Kafka** | `confluentinc/cp-kafka:7.6.6` | multi-broker KRaft (native) | single-node |
+| **Redis** | `redis:6.2.20-alpine` | Sentinel auto-failover (+ HAProxy master router) | standalone |
+| **Memcached** | `memcached:1.6.26-alpine` | none (pure cache; single node) | single-node |
+
+Defaults run everything single-node. Enable HA where it's supported:
+
+```yaml
+# Kafka: multi-broker. replicas must be ODD (controller quorum); set RF/minISR
+# so auto-created topics survive a broker loss (otherwise HA is cosmetic).
+kafka:
+  replicas: 3
+  replicationFactor: 3
+  minInsyncReplicas: 2
+
+# Redis: Sentinel HA. Adds a sentinel sidecar per pod + an HAProxy deployment;
+# the `<release>-redis-master` Service always points at the live master, so even
+# non-Sentinel-aware clients (Snuba) follow failover transparently.
+redis:
+  architecture: replication
+  replicas: 3
+  sentinel:
+    enabled: true
+```
+
+Notes:
+- **Postgres** is the relational source of truth and hardest to fail over safely;
+  the chart keeps it single-node. For production HA, set `postgresql.enabled:
+  false` and point `externalPostgresql.*` at a managed cluster (RDS, Cloud SQL,
+  CloudNativePG/Crunchy). Postgres is rarely the bottleneck — ClickHouse does the
+  heavy querying. Postgres uses password auth (auto-generated secret; override
+  via `postgresql.auth.password` or `postgresql.auth.existingSecret`).
+- **Redis** must stay on the 6.2.x line — Sentry tracks Redis 6.2 and has known
+  incompatibilities with Redis 7 / Valkey.
+- **Kafka** changing `replicas` after first boot needs manual KRaft quorum steps;
+  pick your broker count up front.
+- **Memcached** is a pure cache; running >1 replica behind one Service VIP is not
+  real sharding (it round-robins), so it stays single-node.
+
+When a datastore runs in HA mode (Kafka `replicas>1`, Redis replication/Sentinel,
+or clustered ClickHouse), the chart automatically adds a **PodDisruptionBudget**
+(`maxUnavailable: 1`, tune via `<store>.pdb`) and a **soft pod anti-affinity** so
+replicas spread across nodes. Setting an explicit `<store>.affinity` overrides the
+default anti-affinity; set `<store>.pdb.enabled: false` to skip the PDB.
+
+To use external/managed datastores instead, set `<store>.enabled: false` and fill
+the matching `externalPostgresql` / `externalRedis` / `externalKafka` block.
+
 ## Mail
 
 Disabled by default. Enable SMTP:
@@ -240,9 +298,11 @@ stay compatible. Override per-image via `images.<svc>.tag`.
 helm test sentry -n sentry
 ```
 
-This runs CLI-only `helm test` pods (web `/_health/`, snuba-api `/health`,
-ClickHouse `/ping`). They use `helm.sh/hook: test`, which is never applied during
-install/upgrade and is dropped by Pulumi — so the chart stays hook-free for
+This runs CLI-only `helm test` pods: HTTP health checks for web (`/_health/`),
+snuba-api (`/health`) and ClickHouse (`/ping`), plus TCP connectivity checks for
+the bundled Postgres, Redis and Kafka. They use `helm.sh/hook: test`, which is
+never applied during install/upgrade and is dropped by Pulumi — so the chart
+stays hook-free for
 deploys.
 
 ## Using it from Pulumi
@@ -316,11 +376,10 @@ them:
 
 | Task | What it does |
 | --- | --- |
-| `task deps` | Pull pinned dependencies from `Chart.lock` into `charts/` (extracted, as Helm v4 needs) |
 | `task lint` | `helm lint` |
-| `task template EXAMPLE=feature-complete` | Render one profile |
-| `task test-render` | Render all example profiles to confirm they template cleanly |
-| `task package` | Package the versioned `.tgz` (vendors dependencies) |
+| `task template EXAMPLE=feature-complete` | Render one preset |
+| `task test-render` | Render all example presets to confirm they template cleanly |
+| `task package` | Package the versioned `.tgz` |
 | `task login` | `helm registry login ghcr.io` (needs `GHCR_TOKEN`) |
 | `task notes` | Preview the changelog `task publish` will generate for this version |
 | `task publish` | Package + push to `oci://ghcr.io/sprisa` **and** cut a GitHub Release with grouped notes |

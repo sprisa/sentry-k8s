@@ -1,0 +1,80 @@
+{{- if .Values.redis.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $ns := .Release.Namespace }}
+{{- $headless := printf "%s-redis-headless.%s.svc.cluster.local" $fullname $ns }}
+{{- $useRepl := or (eq .Values.redis.architecture "replication") .Values.redis.sentinel.enabled }}
+{{- $replicas := ternary (int .Values.redis.replicas) 1 $useRepl }}
+{{- $sentinel := .Values.redis.sentinel.enabled }}
+{{- $masterName := .Values.redis.sentinel.masterName | default "mymaster" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+data:
+  redis.conf: |
+    dir /data
+    # Persistence: RDB snapshots are kept by default. Sentry treats Redis as a
+    # cache + buffer/lock store; tune via redis.config if needed.
+    appendonly no
+    {{- with .Values.redis.config }}
+    {{- . | nindent 4 }}
+    {{- end }}
+  start-redis.sh: |
+    #!/bin/sh
+    set -eu
+    ORD="${HOSTNAME##*-}"
+    SELF="{{ $fullname }}-redis-${ORD}.{{ $headless }}"
+    MASTER="{{ $fullname }}-redis-0.{{ $headless }}"
+    {{- if $sentinel }}
+    # Discover the current master from any running sentinel so a restarted pod-0
+    # rejoins as a replica instead of starting a second master (split-brain).
+    i=0
+    while [ "$i" -lt {{ $replicas }} ]; do
+      ADDR="$(redis-cli -h {{ $fullname }}-redis-${i}.{{ $headless }} -p 26379 {{ if .Values.redis.auth.enabled }}-a "$REDIS_PASSWORD" --no-auth-warning {{ end }}sentinel get-master-addr-by-name {{ $masterName }} 2>/dev/null | head -n1)"
+      if [ -n "$ADDR" ]; then MASTER="$ADDR"; break; fi
+      i=$((i + 1))
+    done
+    {{- end }}
+    set -- redis-server /etc/redis/redis.conf --replica-announce-ip "$SELF"
+    if [ "$SELF" != "$MASTER" ]; then
+      set -- "$@" --replicaof "$MASTER" 6379
+    fi
+    {{- if .Values.redis.auth.enabled }}
+    set -- "$@" --requirepass "$REDIS_PASSWORD" --masterauth "$REDIS_PASSWORD"
+    {{- end }}
+    exec "$@"
+  {{- if $sentinel }}
+  start-sentinel.sh: |
+    #!/bin/sh
+    set -eu
+    ORD="${HOSTNAME##*-}"
+    SELF="{{ $fullname }}-redis-${ORD}.{{ $headless }}"
+    MASTER="{{ $fullname }}-redis-0.{{ $headless }}"
+    # Adopt the current master if one is already elected.
+    i=0
+    while [ "$i" -lt {{ $replicas }} ]; do
+      ADDR="$(redis-cli -h {{ $fullname }}-redis-${i}.{{ $headless }} -p 26379 {{ if .Values.redis.auth.enabled }}-a "$REDIS_PASSWORD" --no-auth-warning {{ end }}sentinel get-master-addr-by-name {{ $masterName }} 2>/dev/null | head -n1)"
+      if [ -n "$ADDR" ]; then MASTER="$ADDR"; break; fi
+      i=$((i + 1))
+    done
+    CONF=/tmp/sentinel.conf
+    cat > "$CONF" <<EOF
+    port 26379
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    sentinel announce-ip ${SELF}
+    sentinel monitor {{ $masterName }} ${MASTER} 6379 {{ .Values.redis.sentinel.quorum | default 2 }}
+    sentinel down-after-milliseconds {{ $masterName }} {{ .Values.redis.sentinel.downAfterMilliseconds | default 5000 }}
+    sentinel failover-timeout {{ $masterName }} {{ .Values.redis.sentinel.failoverTimeout | default 60000 }}
+    sentinel parallel-syncs {{ $masterName }} 1
+    {{- if .Values.redis.auth.enabled }}
+    sentinel auth-pass {{ $masterName }} ${REDIS_PASSWORD}
+    requirepass ${REDIS_PASSWORD}
+    {{- end }}
+    EOF
+    exec redis-server "$CONF" --sentinel
+  {{- end }}
+{{- end }}

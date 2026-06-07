@@ -71,3 +71,73 @@ spec:
         - |
           wget -q -O- "http://{{ include "sentry.clickhouse.host" . }}:{{ include "sentry.clickhouse.httpPort" . }}/ping" && echo "clickhouse OK"
 {{- end }}
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullname }}-test-postgresql
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-postgresql
+      image: "{{ include "sentry.image" (dict "root" . "key" "busybox") }}"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          nc -z {{ include "sentry.postgres.host" . }} {{ include "sentry.postgres.port" . }} && echo "postgresql OK"
+{{- end }}
+{{- if .Values.redis.enabled }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullname }}-test-redis
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-redis
+      image: "{{ include "sentry.image" (dict "root" . "key" "busybox") }}"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          nc -z {{ include "sentry.redis.host" . }} {{ include "sentry.redis.port" . }} && echo "redis OK"
+{{- end }}
+{{- if .Values.kafka.enabled }}
+{{- $kafka := splitList ":" (include "sentry.kafka.bootstrap" .) }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullname }}-test-kafka
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-kafka
+      image: "{{ include "sentry.image" (dict "root" . "key" "busybox") }}"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          nc -z {{ $kafka | first }} {{ $kafka | last }} && echo "kafka OK"
+{{- end }}

@@ -1,0 +1,137 @@
+{{- if .Values.redis.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $sc := .Values.redis.persistence.storageClass | default .Values.global.storageClass }}
+{{- $useRepl := or (eq .Values.redis.architecture "replication") .Values.redis.sentinel.enabled }}
+{{- $replicas := ternary (int .Values.redis.replicas) 1 $useRepl }}
+{{- $sentinel := .Values.redis.sentinel.enabled }}
+{{- $auth := .Values.redis.auth.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-redis
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: {{ $fullname }}-redis-headless
+  replicas: {{ $replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "sentry.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "sentry.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+        {{- with .Values.redis.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/redis/configmap.yaml") . | sha256sum }}
+        {{- with .Values.redis.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "sentry.serviceAccountName" . }}
+      {{- include "sentry.imagePullSecrets" . | nindent 6 }}
+      {{- include "sentry.scheduling" (dict "root" . "component" .Values.redis "antiAffinityComponent" (ternary "redis" "" (gt $replicas 1))) | nindent 6 }}
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy | default "IfNotPresent" }}
+          command: ["sh", "/scripts/start-redis.sh"]
+          {{- if $auth }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sentry.redis.secretName" . }}
+                  key: {{ include "sentry.redis.secretKey" . }}
+          {{- end }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", {{ printf "redis-cli %sping" (ternary "-a \"$REDIS_PASSWORD\" --no-auth-warning " "" $auth) | quote }}]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", {{ printf "redis-cli %sping" (ternary "-a \"$REDIS_PASSWORD\" --no-auth-warning " "" $auth) | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis/redis.conf
+              subPath: redis.conf
+            - name: scripts
+              mountPath: /scripts
+          {{- with .Values.redis.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if $sentinel }}
+        - name: sentinel
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy | default "IfNotPresent" }}
+          command: ["sh", "/scripts/start-sentinel.sh"]
+          {{- if $auth }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sentry.redis.secretName" . }}
+                  key: {{ include "sentry.redis.secretKey" . }}
+          {{- end }}
+          ports:
+            - name: sentinel
+              containerPort: 26379
+          livenessProbe:
+            tcpSocket:
+              port: sentinel
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $fullname }}-redis
+            items:
+              - key: redis.conf
+                path: redis.conf
+        - name: scripts
+          configMap:
+            name: {{ $fullname }}-redis
+            defaultMode: 0755
+        {{- if not .Values.redis.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.redis.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "sentry.labels" . | nindent 10 }}
+          app.kubernetes.io/component: redis
+      spec:
+        accessModes:
+          - {{ .Values.redis.persistence.accessMode | default "ReadWriteOnce" }}
+        {{- if $sc }}
+        storageClassName: {{ $sc | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}
+  {{- end }}
+{{- end }}
