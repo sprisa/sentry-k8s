@@ -237,8 +237,8 @@ Uses busybox nc to block until each dependency accepts TCP connections.
 {{- end -}}
 
 {{/*
-Init container that pip-installs extra Python packages into PYTHONUSERBASE
-(/data/custom-packages, on the sentry-data volume). Combines the nodestore-s3
+Init container that pip-installs extra Python packages into /data/custom-packages
+(on the sentry-data volume; exposed via PYTHONPATH). Combines the nodestore-s3
 backend requirement with any user-supplied .Values.sentry.extraPipPackages
 (e.g. "sentry-auth-oidc" for SSO). Renders nothing when there is nothing to
 install. Only meaningful for Sentry-image pods. Input: $ (root).
@@ -255,16 +255,17 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
 - name: install-pip-packages
   image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
   imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+  # The Sentry image runs inside a virtualenv where `pip install --user` is
+  # rejected. Install into a dir on the shared sentry-data volume and expose it
+  # via PYTHONPATH on the runtime pods. rm first so a persistent (filesystem
+  # filestore) PVC stays idempotent across restarts.
   command:
-    - pip
-    - install
-    - --user
-    {{- range $pkgs }}
-    - {{ . | quote }}
-    {{- end }}
-  env:
-    - name: PYTHONUSERBASE
-      value: /data/custom-packages
+    - /bin/sh
+    - -c
+    - |
+      set -e
+      rm -rf /data/custom-packages
+      pip install --target /data/custom-packages{{ range $pkgs }} {{ . | quote }}{{ end }}
   volumeMounts:
     - name: sentry-data
       mountPath: /data
@@ -277,7 +278,9 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
 {{- define "sentry.sentryEnv" -}}
 - name: SENTRY_CONF
   value: /etc/sentry
-- name: PYTHONUSERBASE
+# Extra pip packages are installed with `pip install --target` into this dir
+# (see sentry.pipInstallInit); PYTHONPATH makes them importable at runtime.
+- name: PYTHONPATH
   value: /data/custom-packages
 - name: SNUBA
   value: {{ include "sentry.snuba.host" . }}

@@ -53,22 +53,19 @@ spec:
       {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
       initContainers:
         {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka" "redis")) | nindent 8 }}
+        # The relay image is distroless (no shell), so we can't cp/conditionally
+        # run. config.yml is mounted directly via subPath; credentials are
+        # (re)generated into the emptyDir each start (--overwrite => idempotent).
         - name: relay-credentials
           image: "{{ include "sentry.image" (dict "root" . "key" "relay" "override" $c.image) }}"
           imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "relay" "override" $c.image) }}
-          command:
-            - /bin/sh
-            - -c
-            - |
-              cp /etc/relay/config.yml /work/.relay/config.yml
-              if [ ! -f /work/.relay/credentials.json ]; then
-                relay credentials generate
-              fi
+          args: ["credentials", "generate", "--overwrite"]
           volumeMounts:
             - name: relay-data
               mountPath: /work/.relay
             - name: relay-config
-              mountPath: /etc/relay
+              mountPath: /work/.relay/config.yml
+              subPath: config.yml
       containers:
         - name: relay
           image: "{{ include "sentry.image" (dict "root" . "key" "relay" "override" $c.image) }}"
@@ -84,6 +81,9 @@ spec:
           volumeMounts:
             - name: relay-data
               mountPath: /work/.relay
+            - name: relay-config
+              mountPath: /work/.relay/config.yml
+              subPath: config.yml
           livenessProbe:
             httpGet:
               path: /api/relay/healthcheck/live/
