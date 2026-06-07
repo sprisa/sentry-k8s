@@ -20,7 +20,7 @@ data:
       enabled: true
       kafka_config:
         - {name: "bootstrap.servers", value: "{{ include "sentry.kafka.bootstrap" . }}"}
-        - {name: "message.max.bytes", value: {{ .Values.kafka.maxMessageBytes | default 50000000 }}}
+        - {name: "message.max.bytes", value: {{ .Values.kafka.maxMessageBytes | default 50000000 | int64 }}}
       redis: redis://{{ include "sentry.redis.host" . }}:{{ include "sentry.redis.port" . }}
     health:
       max_memory_percent: 1.0
