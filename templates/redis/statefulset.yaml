@@ -122,7 +122,7 @@ spec:
     - metadata:
         name: data
         labels:
-          {{- include "sentry.labels" . | nindent 10 }}
+          {{- include "sentry.selectorLabels" . | nindent 10 }}
           app.kubernetes.io/component: redis
       spec:
         accessModes:

@@ -125,11 +125,14 @@ spec:
           emptyDir: {}
         {{- end }}
   {{- if .Values.clickhouse.persistence.enabled }}
+  # NOTE: vct labels MUST be version-stable. volumeClaimTemplates is immutable, so
+  # using sentry.labels here (contains helm.sh/chart + app version) would break every
+  # chart upgrade. Use the stable selectorLabels only.
   volumeClaimTemplates:
     - metadata:
         name: data
         labels:
-          {{- include "sentry.labels" . | nindent 10 }}
+          {{- include "sentry.selectorLabels" . | nindent 10 }}
           app.kubernetes.io/component: clickhouse
       spec:
         accessModes:
