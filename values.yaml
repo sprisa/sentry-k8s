@@ -24,8 +24,12 @@ fullnameOverride: ""
 imagePullSecrets: []
 
 serviceAccount:
-  create: false
-  name: "sentry"
+  # Create+own the ServiceAccount that all pods use. Set create:false only if you
+  # pre-provision your own SA (then set `name` to it); otherwise pods fail to
+  # schedule with "serviceaccount not found".
+  create: true
+  # Empty => defaults to the release fullname. Set to reuse an existing SA.
+  name: ""
   annotations: {}
   automountServiceAccountToken: true
 
