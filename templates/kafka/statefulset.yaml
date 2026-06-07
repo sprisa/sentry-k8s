@@ -69,8 +69,11 @@ spec:
               value: "PLAINTEXT"
             - name: CLUSTER_ID
               value: {{ .Values.kafka.clusterId | quote }}
+            # Use a subdir, NOT the volume mount root: ext4/xfs PVCs contain a
+            # lost+found dir at their root, and Kafka's LogManager aborts startup if
+            # the log dir holds anything that isn't topic-partition data.
             - name: KAFKA_LOG_DIRS
-              value: /var/lib/kafka/data
+              value: /var/lib/kafka/data/logs
             # Replication / durability (set replicationFactor=3 + minInsyncReplicas=2 for HA).
             - name: KAFKA_DEFAULT_REPLICATION_FACTOR
               value: {{ .Values.kafka.replicationFactor | default 1 | quote }}
