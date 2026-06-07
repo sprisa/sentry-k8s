@@ -311,6 +311,11 @@ symbolicator:
   replicas: 1
   resources: {}
   nodeSelector: {}
+  # The symbolicator image is distroless (gcr.io/distroless/cc:nonroot) and runs
+  # as uid/gid 65532. Its cache_dir (/data) is a mounted volume, which lands
+  # root-owned; fsGroup makes it writable by the nonroot group.
+  podSecurityContext:
+    fsGroup: 65532
   api:
     useDeployment: true
   persistence:

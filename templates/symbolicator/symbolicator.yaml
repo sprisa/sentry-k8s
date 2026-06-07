@@ -46,6 +46,10 @@ spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" . }}
       {{- include "sentry.imagePullSecrets" . | nindent 6 }}
       {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
+      {{- with $c.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: symbolicator
           image: "{{ include "sentry.image" (dict "root" . "key" "symbolicator") }}"
