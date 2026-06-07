@@ -2,6 +2,9 @@
 {{- $fullname := include "sentry.fullname" . }}
 {{- $sc := .Values.kafka.persistence.storageClass | default .Values.global.storageClass }}
 {{- $replicas := int (.Values.kafka.replicas | default 1) }}
+{{- /* Coerce to int: large YAML numbers stringify as scientific notation (5e+07),
+       which Kafka rejects as a non-INT for *.bytes configs. */}}
+{{- $maxBytes := .Values.kafka.maxMessageBytes | default 50000000 | int64 }}
 {{- /* KRaft controller quorum: one voter per pod, node id = ordinal + 1001. */}}
 {{- $voters := list }}
 {{- range $i := until $replicas }}
@@ -81,11 +84,11 @@ spec:
               value: {{ .Values.kafka.minInsyncReplicas | default 1 | quote }}
             # 50 MB message ceiling (matches docker-compose; large events/sourcemaps).
             - name: KAFKA_MESSAGE_MAX_BYTES
-              value: {{ .Values.kafka.maxMessageBytes | default 50000000 | quote }}
+              value: {{ $maxBytes | quote }}
             - name: KAFKA_MAX_REQUEST_SIZE
-              value: {{ .Values.kafka.maxMessageBytes | default 50000000 | quote }}
+              value: {{ $maxBytes | quote }}
             - name: KAFKA_REPLICA_FETCH_MAX_BYTES
-              value: {{ .Values.kafka.maxMessageBytes | default 50000000 | quote }}
+              value: {{ $maxBytes | quote }}
             - name: KAFKA_LOG_RETENTION_HOURS
               value: {{ .Values.kafka.logRetentionHours | default 24 | quote }}
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE

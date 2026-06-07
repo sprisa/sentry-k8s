@@ -7,7 +7,7 @@ description: >-
   Pulumi- and Terraform-friendly.
 type: application
 # Chart version is independent of the Sentry app version.
-version: 0.3.1
+version: 0.3.2
 # renovate image=ghcr.io/getsentry/sentry
 # All getsentry images default to this tag for cross-service compatibility.
 appVersion: "26.5.0"

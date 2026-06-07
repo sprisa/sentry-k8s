@@ -35,8 +35,11 @@ spec:
         - name: postgresql
           image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
           imagePullPolicy: {{ .Values.postgresql.image.pullPolicy | default "IfNotPresent" }}
-          command:
-            - postgres
+          # NOTE: pass tuning via args (NOT command) so the image's
+          # docker-entrypoint.sh still runs: it drops root -> postgres and handles
+          # initdb / DB+user creation. The entrypoint prepends `postgres` when the
+          # first arg starts with `-`.
+          args:
             - -c
             - max_connections={{ .Values.postgresql.maxConnections }}
             {{- range .Values.postgresql.extraArgs }}
