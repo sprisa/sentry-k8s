@@ -4,7 +4,6 @@
 # For OCI-based chart repos, this file must be pushed to the OCI registry
 # using `oras push` (done automatically by `task publish`).
 repositoryID: a2b13445-a0b9-4594-8308-ed9073ca5942
-sourceRepository: https://github.com/sprisa/sentry-k8s
 owners:
   - name: Gabriel Meola
     email: banter@gabe.mx
