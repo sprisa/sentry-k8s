@@ -43,10 +43,10 @@ tasks:
         cmd: helm template {{.CHART}} . -n {{.NAMESPACE}} -f examples/values-{{.ITEM}}.yaml > /dev/null && echo "OK  {{.ITEM}}"
 
   package:
-    desc: Package the chart into a versioned .tgz (optionally signed with GPG)
+    desc: Package the chart into a versioned .tgz
     cmds:
       - mkdir -p {{.PKG_DIR}}
-      - 'bash -c "helm package . --destination {{.PKG_DIR}} --sign --key \"D83B15A2E133BA4E\""'
+      - helm package . --destination {{.PKG_DIR}}
       - 'echo "Packaged {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz"'
 
   login:
@@ -56,23 +56,30 @@ tasks:
         msg: "Set GHCR_TOKEN to a GitHub PAT with write:packages, e.g. export GHCR_TOKEN=ghp_..."
     cmds:
       - echo "$GHCR_TOKEN" | helm registry login {{.REGISTRY}} -u "${GHCR_USER:-{{.OWNER}}}" --password-stdin
+      - echo "$GHCR_TOKEN" | cosign login {{.REGISTRY}} -u "${GHCR_USER:-{{.OWNER}}}" --password-stdin
 
   publish:
-    desc: Push the chart to ghcr.io (OCI) and cut a GitHub Release (run `task login` first)
+    desc: Push the chart to ghcr.io (OCI), sign it, and cut a GitHub Release (run `task login` first)
     deps: [package]
     preconditions:
       - sh: command -v gh >/dev/null
         msg: "GitHub CLI not found. Install it: https://cli.github.com (brew install gh)"
+      - sh: command -v cosign >/dev/null
+        msg: "cosign not found. Install it: brew install cosign"
+      - sh: command -v oras >/dev/null
+        msg: "oras not found. Install it: brew install oras"
       - sh: gh auth status >/dev/null 2>&1
         msg: "Not logged in to GitHub CLI. Run: gh auth login"
     cmds:
       - helm push {{.PKG_DIR}}/{{.CHART}}-{{.CHART_VERSION}}.tgz {{.OCI_REPO}}
       - 'echo "Published {{.OCI_REPO}}/{{.CHART}}:{{.CHART_VERSION}}"'
+      # Sign the chart artifact with cosign (OIDC-based identity)
+      - cosign sign --yes ghcr.io/sprisa/sentry-k8s:{{.CHART_VERSION}}
+      - 'echo "Signed {{.OCI_REPO}}/{{.CHART}}:{{.CHART_VERSION}}"'
       # Push artifacthub-repo.yml to OCI registry for verified publisher badge.
-      - 'oras push {{.OCI_REPO}}/{{.CHART}}:artifacthub.io --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml || echo "NOTE: oras not found, install from https://oras.land (skipping verified publisher push)"'
+      - 'oras push ghcr.io/sprisa/sentry-k8s:artifacthub.io --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml'
       # Build git-cliff-style notes from Conventional Commits since the last tag,
-      # then cut the GitHub Release: tag the default-branch HEAD as {{.TAG}} and
-      # attach the packaged chart.
+      # then cut the GitHub Release.
       - ./scripts/release-notes.sh {{.TAG}} {{.OWNER}}/{{.CHART}} > {{.PKG_DIR}}/RELEASE_NOTES.md
       - >-
         gh release create {{.TAG}}
