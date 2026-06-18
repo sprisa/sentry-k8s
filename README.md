@@ -176,6 +176,57 @@ volumes.
   works if web/worker/cron pods are pinned to the same node (via `nodeSelector`).
   For multi-node you must use `ReadWriteMany`. Simplest to start, least HA.
 
+## Resources
+
+Every component ships with default resource requests and limits. These are sensible
+starting points for a moderate workload (~hundreds of events/second); tune them up
+as your ingest volume grows. Consumer pods (Kafka ingest/forwarder/subscription)
+default to **no resource constraints** — set their `resources` key per-component
+to add limits.
+
+### Cluster totals by preset
+
+| Preset | Workloads | CPU requests | Mem requests | Recommended min node |
+|---|---|---|---|---|
+| **Errors only** | 17 Deploy + 5 StatefulSets | ~2.7 cores | ~6.0 Gi | 4 CPU / 16 Gi |
+| **Errors + transactions** | 22 Deploy + 5 StatefulSets | ~2.9 cores | ~6.5 Gi | 4 CPU / 16 Gi |
+| **Feature complete** | 40-60 Deploy + 5 StatefulSets | ~3.3 cores | ~8.0 Gi | 8 CPU / 32 Gi |
+
+> CPU is the first bottleneck. ClickHouse and Kafka are the most
+> resource-sensitive components — bump their resources before anything else.
+
+### Per-component defaults
+
+Override any value via `<key>.resources` (e.g. `sentry.web.resources.requests.cpu`).
+
+| Component | Values key | Request CPU | Request mem | Limit CPU | Limit mem |
+|---|---|---|---|---|---|
+| Web | `sentry.web.resources` | 200m | 850Mi | 500m | 1Gi |
+| Relay | `relay.resources` | 200m | 512Mi | 500m | 1Gi |
+| Snuba API | `snuba.api.resources` | 200m | 256Mi | 500m | 512Mi |
+| Task broker | `sentry.taskbroker.resources` | 100m | 128Mi | 200m | 256Mi |
+| Task scheduler | `sentry.taskscheduler.resources` | 100m | 256Mi | 200m | 512Mi |
+| Task worker | `sentry.taskworker.resources` | 200m | 512Mi | 500m | 1Gi |
+| Cleanup CronJob | `sentry.cleanup.resources` | 300m | 1Gi | 500m | 2Gi |
+| Symbolicator | `symbolicator.resources` | 200m | 512Mi | 1 | 1Gi |
+| Vroom (profiling) | `vroom.resources` | 100m | 512Mi | 500m | 1Gi |
+| Uptime checker | `uptimeChecker.resources` | 100m | 512Mi | 300m | 1Gi |
+| Launchpad | `launchpad.resources` | 200m | 512Mi | 500m | 1Gi |
+| ClickHouse | `clickhouse.resources` | 500m | 1Gi | 2 | 4Gi |
+| ClickHouse Keeper | `clickhouse.keeper.resources` | 200m | 256Mi | 500m | 512Mi |
+| Kafka | `kafka.resources` | 500m | 1Gi | 2 | 2Gi |
+| Redis | `redis.resources` | 100m | 128Mi | 500m | 256Mi |
+| Redis HAProxy | `redis.haproxy.resources` | 10m | 16Mi | 50m | 32Mi |
+| PostgreSQL | `postgresql.resources` | 200m | 256Mi | 1 | 1Gi |
+| Memcached | `memcached.resources` | 50m | 64Mi | 200m | 128Mi |
+| Nginx | `nginx.resources` | 50m | 64Mi | 200m | 128Mi |
+| Bootstrap Job | `bootstrap.resources` | — | — | — | — |
+
+> Consumer pods (ingest, forwarder, subscription) default to no resource constraints.
+> Set their `resources` key to add limits. Keys live under `sentry.<consumerName>.resources`
+> and `snuba.<consumerName>.resources` — see [`values.yaml`](./values.yaml) for the
+> full list of consumer names.
+
 ## Bundled datastores & HA
 
 Postgres, Redis, Kafka and Memcached are **first-class in-tree templates** (no

@@ -94,6 +94,8 @@ bootstrap:
   ttlSecondsAfterFinished: 1800
   # Init container nc-waits for ClickHouse/Kafka/Postgres/Redis before migrating.
   waitForInfra: true
+  # Applies to the final no-op "done" container only; the heavy init containers
+  # (snuba-bootstrap, snuba-migrate, sentry-upgrade, create-user) run unconstrained.
   resources: {}
   nodeSelector: {}
   affinity: {}
@@ -143,7 +145,13 @@ sentry:
     workers: 3
     image: {}
     env: []
-    resources: {}
+    resources:
+      requests:
+        cpu: 200m
+        memory: 850Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
     nodeSelector: {}
     affinity: {}
     tolerations: []
@@ -165,7 +173,13 @@ sentry:
     replicas: 1
     image: {}
     env: []
-    resources: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
     nodeSelector: {}
     affinity: {}
     tolerations: []
@@ -179,50 +193,140 @@ sentry:
   taskscheduler:
     enabled: true
     replicas: 1
-    resources: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
     nodeSelector: {}
 
   taskworker:
     enabled: true
     replicas: 1
     concurrency: 4
-    resources: {}
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
     nodeSelector: {}
 
   # --- base error-tracking ingest/consumers (on by default) ---
-  ingestEvents: { enabled: true }
-  ingestAttachments: { enabled: true }
-  postProcessForwarderErrors: { enabled: true }
-  subscriptionConsumerEvents: { enabled: true }
+  ingestEvents:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  ingestAttachments:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  postProcessForwarderErrors:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerEvents:
+    enabled: true
+    resources: {}
+    podLabels: {}
 
   cleanup:
     enabled: true
     schedule: "0 0 * * *"
-    resources: {}
+    resources:
+      requests:
+        cpu: 300m
+        memory: 1Gi
+      limits:
+        cpu: 500m
+        memory: 2Gi
     nodeSelector: {}
 
   # --- transactions / metrics / replays / profiling / monitors / uptime / spans
   # consumers (off by default; flip enabled:true, see examples/). ---
-  transactions: { enabled: false }
-  metrics: { enabled: false }
-  genericMetrics: { enabled: false }
-  billingMetrics: { enabled: false }
-  ingestReplayRecordings: { enabled: false }
-  ingestOccurrences: { enabled: false }
-  ingestProfiles: { enabled: false }
-  ingestMonitors: { enabled: false }
-  ingestFeedback: { enabled: false }
-  processSpans: { enabled: false }
-  processSegments: { enabled: false }
-  monitorsClockTick: { enabled: false }
-  monitorsClockTasks: { enabled: false }
-  uptimeResults: { enabled: false }
-  postProcessForwarderTransactions: { enabled: false }
-  postProcessForwarderIssuePlatform: { enabled: false }
-  subscriptionConsumerTransactions: { enabled: false }
-  subscriptionConsumerMetrics: { enabled: false }
-  subscriptionConsumerGenericMetrics: { enabled: false }
-  subscriptionConsumerEapItems: { enabled: false }
+  transactions:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  metrics:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  genericMetrics:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  billingMetrics:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  ingestReplayRecordings:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  ingestOccurrences:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  ingestProfiles:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  ingestMonitors:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  ingestFeedback:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  processSpans:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  processSegments:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  monitorsClockTick:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  monitorsClockTasks:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  uptimeResults:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  postProcessForwarderTransactions:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  postProcessForwarderIssuePlatform:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerTransactions:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerMetrics:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerGenericMetrics:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerEapItems:
+    enabled: false
+    resources: {}
+    podLabels: {}
 
 # -----------------------------------------------------------------------------
 # Snuba
@@ -239,7 +343,13 @@ snuba:
   api:
     enabled: true
     replicas: 1
-    resources: {}
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     nodeSelector: {}
     affinity: {}
     tolerations: []
@@ -253,33 +363,108 @@ snuba:
       targetCPUUtilizationPercentage: 75
 
   # --- base error-tracking (on by default) ---
-  consumer: { enabled: true }
-  outcomesConsumer: { enabled: true }
-  outcomesBillingConsumer: { enabled: true }
-  replacer: { enabled: true }
-  groupAttributesConsumer: { enabled: true }
-  subscriptionConsumerEvents: { enabled: true }
+  consumer:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  outcomesConsumer:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  outcomesBillingConsumer:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  replacer:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  groupAttributesConsumer:
+    enabled: true
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerEvents:
+    enabled: true
+    resources: {}
+    podLabels: {}
 
   # --- transactions / replays / metrics / profiling / EAP (off by default) ---
-  transactionsConsumer: { enabled: false }
-  replaysConsumer: { enabled: false }
-  issueOccurrenceConsumer: { enabled: false }
-  metricsConsumer: { enabled: false }
-  genericMetricsSetsConsumer: { enabled: false }
-  genericMetricsCountersConsumer: { enabled: false }
-  genericMetricsDistributionsConsumer: { enabled: false }
-  genericMetricsGaugesConsumer: { enabled: false }
-  profilingProfilesConsumer: { enabled: false }
-  profilingFunctionsConsumer: { enabled: false }
-  profilingChunksConsumer: { enabled: false }
-  eapItemsConsumer: { enabled: false }
-  subscriptionConsumerTransactions: { enabled: false }
-  subscriptionConsumerMetrics: { enabled: false }
-  subscriptionConsumerGenericMetricsSets: { enabled: false }
-  subscriptionConsumerGenericMetricsCounters: { enabled: false }
-  subscriptionConsumerGenericMetricsDistributions: { enabled: false }
-  subscriptionConsumerGenericMetricsGauges: { enabled: false }
-  subscriptionConsumerEapItems: { enabled: false }
+  transactionsConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  replaysConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  issueOccurrenceConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  metricsConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  genericMetricsSetsConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  genericMetricsCountersConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  genericMetricsDistributionsConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  genericMetricsGaugesConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  profilingProfilesConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  profilingFunctionsConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  profilingChunksConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  eapItemsConsumer:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerTransactions:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerMetrics:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerGenericMetricsSets:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerGenericMetricsCounters:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerGenericMetricsDistributions:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerGenericMetricsGauges:
+    enabled: false
+    resources: {}
+    podLabels: {}
+  subscriptionConsumerEapItems:
+    enabled: false
+    resources: {}
+    podLabels: {}
 
 # -----------------------------------------------------------------------------
 # Relay (always on; ingest edge)
@@ -290,7 +475,13 @@ relay:
   mode: managed
   image: {}
   env: []
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -309,7 +500,13 @@ relay:
 symbolicator:
   enabled: false
   replicas: 1
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   nodeSelector: {}
   # The symbolicator image is distroless (gcr.io/distroless/cc:nonroot) and runs
   # as uid/gid 65532. Its cache_dir (/data) is a mounted volume, which lands
@@ -330,7 +527,13 @@ symbolicator:
 vroom:
   enabled: false
   replicas: 1
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
   nodeSelector: {}
   persistence:
     enabled: true
@@ -341,7 +544,13 @@ vroom:
 uptimeChecker:
   enabled: false
   replicas: 1
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 300m
+      memory: 1Gi
   nodeSelector: {}
   allowInternalIps: false
   failureRetries: 1
@@ -350,7 +559,13 @@ launchpad:
   enabled: false
   replicas: 1
   concurrency: 4
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
   nodeSelector: {}
 
 # -----------------------------------------------------------------------------
@@ -384,7 +599,13 @@ clickhouse:
       enabled: true
       size: 10Gi
       storageClass: ""
-    resources: {}
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     nodeSelector: {}
   # settings -> config.xml (server level), profiles -> users.xml.
   settings:
@@ -395,7 +616,13 @@ clickhouse:
     size: 50Gi
     storageClass: ""
     accessMode: ReadWriteOnce
-  resources: {}
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -457,7 +684,13 @@ kafka:
     size: 20Gi
     storageClass: ""
     accessMode: ReadWriteOnce
-  resources: {}
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -505,7 +738,13 @@ redis:
       repository: haproxy
       tag: 2.9-alpine
       pullPolicy: IfNotPresent
-    resources: {}
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 50m
+        memory: 32Mi
   # Extra redis.conf lines appended verbatim.
   config: ""
   persistence:
@@ -513,7 +752,13 @@ redis:
     size: 8Gi
     storageClass: ""
     accessMode: ReadWriteOnce
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -560,7 +805,13 @@ postgresql:
     size: 20Gi
     storageClass: ""
     accessMode: ReadWriteOnce
-  resources: {}
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -590,7 +841,13 @@ memcached:
   # Max item size; matches docker-compose `-I 1M` (sourcemap upload ceiling).
   maxItemSize: "1m"
   extraArgs: []
-  resources: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -681,7 +938,13 @@ nginx:
     tag: 1.31.0-alpine
     pullPolicy: IfNotPresent
   replicas: 1
-  resources: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
   nodeSelector: {}
   affinity: {}
   tolerations: []
