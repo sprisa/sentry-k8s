@@ -384,7 +384,6 @@ npm/yarn are unaffected.
 sentry:
   jsSdk:
     setupAssets: true
-    defaultSdkUrl: "/js-sdk/%s/bundle%s.min.js"
     persistence:
       enabled: true
       size: 500Mi
@@ -397,9 +396,10 @@ sentry:
   bundles from the CDN at pod startup. Toggle this on an existing deployment
   at any time — a `helm upgrade` rolls the web pods and the bundles are served
   immediately. No migration or project-side changes are needed.
-- **`defaultSdkUrl`** — URL template for the SDK bundles. Defaults to a local
-  `/js-sdk/...` path (no CDN). Change to a CDN URL only if you have a separate
-  CDN/distribution layer. `%s` is replaced by the SDK version and bundle variant.
+- **`defaultSdkUrl`** — URL template for the SDK bundles. Defaults to an absolute
+  URL constructed from `sentry.system.url` (e.g. `https://sentry.example.com/js-sdk/%s/bundle%s.min.js`).
+  Set explicitly only if you need a different CDN/distribution layer. `%s` is
+  replaced by the SDK version and bundle variant.
 - **`persistence`** — Optional PVC-backed storage for the downloaded bundles.
   When enabled, the init container skips re-download across nginx restarts via
   a checksum marker on the PVC. With the default `emptyDir` (no PVC), bundles

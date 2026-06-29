@@ -140,11 +140,10 @@ sentry:
     # (Sentry returns a no-op CDN redirect loader when false).
     setupAssets: false
     # URL template used when setupAssets is true; %s = SDK version / bundle variant.
-    # When serving bundles locally (the default for setupAssets=true), this
-    # should be a relative path so the browser loads from your own domain
-    # (avoiding CDN adblockers). Change to the CDN URL only if you have a
-    # separate CDN/distribution layer.
-    defaultSdkUrl: "/js-sdk/%s/bundle%s.min.js"
+    # When empty (default), the template constructs an absolute URL from
+    # sentry.system.url (e.g. https://sentry.example.com/js-sdk/%s/bundle%s.min.js).
+    # Set this explicitly to override, e.g. to a CDN URL.
+    defaultSdkUrl: ""
     # Optional PVC for the downloaded JS SDK bundles. When enabled, the init
     # container skips re-download across nginx restarts via a checksum marker
     # (emptyDir re-downloads on every restart).
