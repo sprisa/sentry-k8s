@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/component: redis
         {{- with .Values.redis.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
       annotations:
-        checksum/config: {{ include (print .Template.BasePath "/redis/configmap.yaml") . | sha256sum }}
+        checksum/config: {{ .Values.redis.config | toYaml | sha256sum }}-{{ .Values.redis.architecture | sha256sum }}-{{ .Values.redis.replicas | default 1 }}-{{ .Values.redis.sentinel | toYaml | sha256sum }}-{{ .Values.redis.auth | toYaml | sha256sum }}
         {{- with .Values.redis.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" . }}
