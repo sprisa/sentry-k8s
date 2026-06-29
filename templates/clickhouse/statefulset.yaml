@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/component: clickhouse
         {{- with .Values.clickhouse.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
       annotations:
-        checksum/config: {{ include (print .Template.BasePath "/clickhouse/configmap.yaml") . | sha256sum }}
+        checksum/config: {{ .Values.clickhouse.settings | toYaml | sha256sum }}-{{ .Values.clickhouse.profiles | toYaml | sha256sum }}-{{ .Values.clickhouse.password | sha256sum }}-{{ .Values.clickhouse.layout | toYaml | sha256sum }}-{{ .Values.clickhouse.clusterName | sha256sum }}-{{ .Values.clickhouse.keeper.replicaCount | default 0 }}
         {{- with .Values.clickhouse.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" . }}

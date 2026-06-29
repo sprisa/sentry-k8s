@@ -40,7 +40,7 @@ spec:
         app.kubernetes.io/component: {{ .name }}
         {{- with $c.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
       annotations:
-        checksum/config: {{ include (print $root.Template.BasePath "/sentry/configmap.yaml") $root | sha256sum }}
+        checksum/config: {{ (include "sentry.configyml" $root) | sha256sum }}-{{ (include "sentry.confpy" $root) | sha256sum }}
         {{- with $c.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" $root }}
