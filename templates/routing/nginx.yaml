@@ -93,7 +93,8 @@ data:
         proxy_cache_valid 200 365d;
         proxy_cache_use_stale error timeout updating;
         proxy_ignore_headers Set-Cookie;
-        add_header Access-Control-Allow-Origin *;
+        proxy_hide_header Access-Control-Allow-Origin;
+        add_header Access-Control-Allow-Origin * always;
       }{{- end }}
     }
     }
