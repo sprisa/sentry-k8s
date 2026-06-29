@@ -360,9 +360,9 @@ The full value surface is documented inline in [`values.yaml`](./values.yaml).
 Highlights:
 
 - `sentry.selfHostedErrorsOnly`, `sentry.eventRetentionDays`, `sentry.system.url`
-- `sentry.jsSdk.setupAssets` — serve JS SDK bundles locally instead of from the CDN
-  (only affects plain `<script>` projects without a bundler; see
-  [JS SDK Loader](#js-sdk-loader))
+- `sentry.jsSdk.setupAssets` — proxy JS SDK bundles through nginx with local cache
+  instead of loading from the CDN directly (only affects plain `<script>` projects
+  without a bundler; see [JS SDK Loader](#js-sdk-loader))
 - `sentry.jsSdk.defaultSdkUrl` — CDN URL template used when `setupAssets` is `true`
 - per-component blocks (`enabled`, `replicas`, `resources`, `nodeSelector`,
   `affinity`, `tolerations`, `autoscaling`, …)
@@ -384,26 +384,18 @@ npm/yarn are unaffected.
 sentry:
   jsSdk:
     setupAssets: true
-    persistence:
-      enabled: true
-      size: 500Mi
 ```
 
 - **`setupAssets: false` (default)** — Sentry returns a lightweight no-op loader
   that redirects to the CDN.
-- **`setupAssets: true`** — Sentry serves the SDK bundles from the local nginx
-  instead of `browser.sentry-cdn.com`. The nginx init container downloads the
-  bundles from the CDN at pod startup. Toggle this on an existing deployment
-  at any time — a `helm upgrade` rolls the web pods and the bundles are served
-  immediately. No migration or project-side changes are needed.
+- **`setupAssets: true`** — nginx proxies `/js-sdk/*` requests to
+  `browser.sentry-cdn.com` with a local cache (1 GB, 1-year TTL). The first
+  request after deploy fetches from the CDN; subsequent ones serve from nginx's
+  ephemeral storage. No init container, no PVC, no download script.
 - **`defaultSdkUrl`** — URL template for the SDK bundles. Defaults to an absolute
   URL constructed from `sentry.system.url` (e.g. `https://sentry.example.com/js-sdk/%s/bundle%s.min.js`).
   Set explicitly only if you need a different CDN/distribution layer. `%s` is
   replaced by the SDK version and bundle variant.
-- **`persistence`** — Optional PVC-backed storage for the downloaded bundles.
-  When enabled, the init container skips re-download across nginx restarts via
-  a checksum marker on the PVC. With the default `emptyDir` (no PVC), bundles
-  are re-downloaded on every nginx restart.
 
 ## Development & releasing (maintainers)
 
