@@ -18,7 +18,10 @@
           "description": "Default nodeSelector applied to chart-owned workloads"
         },
         "kafkaMaxPollIntervalMs": {
-          "type": "string",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer", "minimum": 1 }
+          ],
           "description": "Kafka max poll interval in ms applied to all consumers (default: 300000)"
         }
       }
@@ -790,7 +793,13 @@
         "tolerations": { "type": "array" },
         "podAnnotations": { "type": "object" },
         "clientMaxBodySize": { "type": "string" },
-        "proxyReadTimeout": { "type": "string", "description": "Nginx proxy_read_timeout for upstream requests" },
+        "proxyReadTimeout": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer", "minimum": 1 }
+          ],
+          "description": "Nginx proxy_read_timeout for upstream requests"
+        },
         "service": {
           "type": "object",
           "properties": {

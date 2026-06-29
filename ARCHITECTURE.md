@@ -44,7 +44,7 @@ flowchart TD
         OBJ[(S3 / R2 or filesystem<br/>filestore/nodestore/replays/profiles)]
     end
 
-    Client -->|/api/{id}/, /api/store/| NGINX --> REL
+    Client -->|"/api/{id}/, /api/store/"| NGINX --> REL
     Client -->|UI, REST API| NGINX --> WEB
     REL -->|envelopes| KF
     KF --> ING
