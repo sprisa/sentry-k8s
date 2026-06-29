@@ -384,17 +384,26 @@ npm/yarn are unaffected.
 sentry:
   jsSdk:
     setupAssets: true
-    defaultSdkUrl: "https://browser.sentry-cdn.com/%s/bundle%s.min.js"
+    defaultSdkUrl: "/js-sdk/%s/bundle%s.min.js"
+    persistence:
+      enabled: true
+      size: 500Mi
 ```
 
 - **`setupAssets: false` (default)** — Sentry returns a lightweight no-op loader
   that redirects to the CDN.
-- **`setupAssets: true`** — Sentry downloads, caches, and serves the SDK bundles
-  itself, with no external CDN dependency. Toggle this on an existing deployment
+- **`setupAssets: true`** — Sentry serves the SDK bundles from the local nginx
+  instead of `browser.sentry-cdn.com`. The nginx init container downloads the
+  bundles from the CDN at pod startup. Toggle this on an existing deployment
   at any time — a `helm upgrade` rolls the web pods and the bundles are served
   immediately. No migration or project-side changes are needed.
-- **`defaultSdkUrl`** — CDN URL template used when `setupAssets` is `true`.
-  `%s` is replaced by the SDK version and bundle variant.
+- **`defaultSdkUrl`** — URL template for the SDK bundles. Defaults to a local
+  `/js-sdk/...` path (no CDN). Change to a CDN URL only if you have a separate
+  CDN/distribution layer. `%s` is replaced by the SDK version and bundle variant.
+- **`persistence`** — Optional PVC-backed storage for the downloaded bundles.
+  When enabled, the init container skips re-download across nginx restarts via
+  a checksum marker on the PVC. With the default `emptyDir` (no PVC), bundles
+  are re-downloaded on every nginx restart.
 
 ## Development & releasing (maintainers)
 

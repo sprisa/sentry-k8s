@@ -252,20 +252,30 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
 {{- $pkgs = append $pkgs . -}}
 {{- end -}}
 {{- if $pkgs }}
+{{- $sorted := $pkgs | uniq | sortAlpha }}
+{{- $checksum := $sorted | join "," | sha256sum }}
 - name: install-pip-packages
   image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
   imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
   # The Sentry image runs inside a virtualenv where `pip install --user` is
   # rejected. Install into a dir on the shared sentry-data volume and expose it
-  # via PYTHONPATH on the runtime pods. rm first so a persistent (filesystem
-  # filestore) PVC stays idempotent across restarts.
+  # via PYTHONPATH on the runtime pods. A marker file with the package-list
+  # checksum lets a persistent PVC skip reinstallation across pod restarts;
+  # emptyDir volumes always install (marker doesn't survive the pod).
   command:
     - /bin/sh
     - -c
     - |
       set -e
+      MARKER=/data/custom-packages/.pip-installed-{{ $checksum }}
+      if [ -f "$MARKER" ]; then
+        echo "pip packages already installed (checksum {{ $checksum }})"
+        exit 0
+      fi
       rm -rf /data/custom-packages
-      pip install --target /data/custom-packages{{ range $pkgs }} {{ . | quote }}{{ end }}
+      mkdir -p /data/custom-packages
+      pip install --target /data/custom-packages{{ range $sorted }} {{ . | quote }}{{ end }}
+      touch "$MARKER"
   volumeMounts:
     - name: sentry-data
       mountPath: /data
