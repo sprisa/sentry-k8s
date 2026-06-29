@@ -258,7 +258,11 @@ if SENTRY_STATSD_ADDR:
     SENTRY_METRICS_OPTIONS = {"host": host, "port": port}
 
 {{- if .Values.sentry.jsSdk.setupAssets }}
-JS_SDK_LOADER_DEFAULT_SDK_URL = {{ .Values.sentry.jsSdk.defaultSdkUrl | quote }}
+{{- $sdkUrl := .Values.sentry.jsSdk.defaultSdkUrl }}
+{{- if not $sdkUrl }}
+{{-   $sdkUrl = printf "%s/js-sdk/%%s/bundle%%s.min.js" (trimSuffix "/" .Values.sentry.system.url) }}
+{{- end }}
+JS_SDK_LOADER_DEFAULT_SDK_URL = {{ $sdkUrl | quote }}
 {{- end }}
 
 {{- if .Values.sentry.config }}
