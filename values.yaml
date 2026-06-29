@@ -140,7 +140,11 @@ sentry:
     # (Sentry returns a no-op CDN redirect loader when false).
     setupAssets: false
     # URL template used when setupAssets is true; %s = SDK version / bundle variant.
-    defaultSdkUrl: "https://browser.sentry-cdn.com/%s/bundle%s.min.js"
+    # When serving bundles locally (the default for setupAssets=true), this
+    # should be a relative path so the browser loads from your own domain
+    # (avoiding CDN adblockers). Change to the CDN URL only if you have a
+    # separate CDN/distribution layer.
+    defaultSdkUrl: "/js-sdk/%s/bundle%s.min.js"
 
   # Extra pip packages installed into PYTHONUSERBASE (/data/custom-packages) via
   # an init container on every Sentry-image pod, instead of baking a custom

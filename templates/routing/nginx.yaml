@@ -74,18 +74,22 @@ data:
         location ^~ /api/0/relays/ {
           proxy_pass http://relay;
         }
-        location / {
-          proxy_pass http://sentry;
-        }
-        location /_assets/ {
-          proxy_pass http://sentry/_static/dist/sentry/;
-          proxy_hide_header Content-Disposition;
-        }
-        location /_static/ {
-          proxy_pass http://sentry;
-          proxy_hide_header Content-Disposition;
-        }
+      location / {
+        proxy_pass http://sentry;
       }
+      location /_assets/ {
+        proxy_pass http://sentry/_static/dist/sentry/;
+        proxy_hide_header Content-Disposition;
+      }
+      location /_static/ {
+        proxy_pass http://sentry;
+        proxy_hide_header Content-Disposition;
+      }{{- if .Values.sentry.jsSdk.setupAssets }}
+      location ^~ /js-sdk/ {
+        root /var/www/;
+        add_header Access-Control-Allow-Origin *;
+      }{{- end }}
+    }
     }
 ---
 apiVersion: apps/v1
@@ -108,12 +112,64 @@ spec:
         {{- include "sentry.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: nginx
       annotations:
-        checksum/config: {{ printf "%s|%v|%v" $fullname ($c.clientMaxBodySize | default "100m") ($c.proxyReadTimeout | default "30s") | sha256sum }}
+        checksum/config: {{ printf "%s|%v|%v|%v|%s" $fullname ($c.clientMaxBodySize | default "100m") ($c.proxyReadTimeout | default "30s") (.Values.sentry.jsSdk.setupAssets) (include "sentry.image" (dict "root" . "key" "sentry")) | sha256sum }}
         {{- with $c.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" . }}
       {{- include "sentry.imagePullSecrets" . | nindent 6 }}
       {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
+      {{- if .Values.sentry.jsSdk.setupAssets }}
+      initContainers:
+        - name: setup-js-sdk-assets
+          image: "{{ include "sentry.image" (dict "root" . "key" "sentry") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "sentry") }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              REG_PATH=/usr/src/sentry/src/sentry/loader/_registry.json
+              if [ ! -f "$REG_PATH" ]; then
+                echo "no loader registry found at $REG_PATH — skipping"
+                exit 0
+              fi
+              DEST=/var/www/js-sdk
+              # Parse the registry to get the latest of each major version (v4–v10).
+              VERSIONS=$(python3 -c "
+              import json, sys, os
+              reg = json.load(open('$REG_PATH'))
+              majors = {'4','5','6','7','8','9','10'}
+              seen = set()
+              for v in reversed(reg['versions']):
+                  m = v.split('.')[0]
+                  if m in majors and m not in seen:
+                      seen.add(m)
+                      print(v)
+              " 2>/dev/null || echo "")
+              if [ -z "$VERSIONS" ]; then
+                echo "no SDK versions found — skipping"
+                exit 0
+              fi
+              echo "downloading SDK bundles: $(echo $VERSIONS)"
+              for ver in $VERSIONS; do
+                for variant in bundle bundle.tracing bundle.tracing.replay bundle.replay bundle.tracing.replay.feedback bundle.feedback; do
+                  url="https://browser.sentry-cdn.com/$ver/$variant.min.js"
+                  fdir="$DEST/$ver"
+                  mkdir -p "$fdir"
+                  if curl -sL -f --compressed --connect-timeout 10 --max-time 30 -o "$fdir/$variant.min.js" "$url" 2>/dev/null; then
+                    echo "  OK  $ver/$variant.min.js"
+                  else
+                    echo "  SKIP $ver/$variant.min.js"
+                  fi
+                done
+              done
+              find "$DEST" -type d -exec chmod 755 {} \;
+              find "$DEST" -type f -exec chmod 644 {} \;
+              echo "done"
+          volumeMounts:
+            - name: js-sdk
+              mountPath: /var/www/js-sdk
+      {{- end }}
       containers:
         - name: nginx
           image: "{{ $c.image.repository }}:{{ $c.image.tag }}"
@@ -124,7 +180,10 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/nginx/nginx.conf
-              subPath: nginx.conf
+              subPath: nginx.conf{{- if .Values.sentry.jsSdk.setupAssets }}
+            - name: js-sdk
+              mountPath: /var/www/js-sdk
+{{- end }}
           readinessProbe:
             tcpSocket:
               port: http
@@ -142,7 +201,10 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ $fullname }}-nginx
+            name: {{ $fullname }}-nginx{{- if .Values.sentry.jsSdk.setupAssets }}
+        - name: js-sdk
+          emptyDir: {}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
