@@ -18,3 +18,6 @@ jobs:
 
       - name: Lint
         run: task lint
+
+      - name: Test render all presets
+        run: task test-render
