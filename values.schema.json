@@ -786,6 +786,7 @@
         "tolerations": { "type": "array" },
         "podAnnotations": { "type": "object" },
         "clientMaxBodySize": { "type": "string" },
+        "proxyReadTimeout": { "type": "string", "description": "Nginx proxy_read_timeout for upstream requests" },
         "service": {
           "type": "object",
           "properties": {

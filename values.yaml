@@ -695,6 +695,7 @@ nginx:
   tolerations: []
   podAnnotations: {}
   clientMaxBodySize: 100m
+  proxyReadTimeout: 30s
   service:
     type: ClusterIP
     port: 80
