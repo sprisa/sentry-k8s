@@ -2,6 +2,8 @@
 {{- $c := .Values.sentry.taskbroker }}
 {{- if (ne $c.enabled false) }}
 {{- $sc := $c.persistence.storageClass | default .Values.global.storageClass }}
+{{- $isNewConfig := semverCompare ">=26.6.0" .Chart.AppVersion }}
+{{- if $isNewConfig }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -21,6 +23,7 @@ data:
         consumer_group: taskworker
         produce_only: true
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -53,10 +56,19 @@ spec:
         - name: taskbroker
           image: "{{ include "sentry.image" (dict "root" . "key" "taskbroker" "override" $c.image) }}"
           imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "taskbroker" "override" $c.image) }}
+{{- if $isNewConfig }}
           command: ["/opt/taskbroker", "-c", "/etc/taskbroker/config.yml"]
+{{- end }}
           env:
+{{- if $isNewConfig }}
             - name: TASKBROKER_KAFKA_CLUSTERS__DEFAULT__ADDRESS
               value: {{ include "sentry.kafka.bootstrap" . | quote }}
+{{- else }}
+            - name: TASKBROKER_KAFKA_CLUSTER
+              value: {{ include "sentry.kafka.bootstrap" . | quote }}
+            - name: TASKBROKER_KAFKA_DEADLETTER_CLUSTER
+              value: {{ include "sentry.kafka.bootstrap" . | quote }}
+{{- end }}
             - name: TASKBROKER_DB_PATH
               value: /opt/sqlite/taskbroker-activations.sqlite
             {{- with $c.env }}{{ toYaml . | nindent 12 }}{{- end }}
@@ -66,16 +78,20 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /opt/sqlite
+{{- if $isNewConfig }}
             - name: config
               mountPath: /etc/taskbroker
+{{- end }}
           {{- with $c.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
+{{- if $isNewConfig }}
         - name: config
           configMap:
             name: {{ $fullname }}-taskbroker-config
+{{- end }}
         {{- if not $c.persistence.enabled }}
         - name: data
           emptyDir: {}

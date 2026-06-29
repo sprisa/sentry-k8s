@@ -56,7 +56,12 @@ spec:
           image: "{{ include "sentry.image" (dict "root" $root "key" .imageKey "override" $c.image) }}"
           imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" $root "key" .imageKey "override" $c.image) }}
           args:
-            {{- toYaml .command | nindent 12 }}
+            {{- $cmd := .command }}
+            {{- if and .maxPollIntervalMs (semverCompare ">=26.6.0" $root.Chart.AppVersion) }}
+            {{- $cmd = append $cmd "--max-poll-interval-ms" }}
+            {{- $cmd = append $cmd "300000" }}
+            {{- end }}
+            {{- toYaml $cmd | nindent 12 }}
           env:
             {{- if $isSnuba }}
             {{- include "sentry.snubaEnv" $root | nindent 12 }}
