@@ -1,6 +1,6 @@
 # sentry-k8s
 
-[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/sentry-k8s)](https://artifacthub.io/packages/search?repo=sentry-k8s)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/sentry-k8s)](https://artifacthub.io/packages/helm/sentry-k8s/sentry-k8s)
 
 A self-contained Helm chart for **Sentry self-hosted** on Kubernetes, with a
 **first-class bundled ClickHouse** (no external provisioning) and every required service wired up. One `helm install` brings up the whole stack.
