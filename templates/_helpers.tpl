@@ -354,7 +354,7 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
   value: "1"
 {{- end }}
 - name: SENTRY_KAFKA_MAX_POLL_INTERVAL_MS
-  value: "300000"
+  value: {{ .Values.global.kafkaMaxPollIntervalMs | default "300000" | quote }}
 - name: LAUNCHPAD_RPC_SHARED_SECRET
   valueFrom:
     secretKeyRef:
@@ -435,7 +435,7 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
 - name: SENTRY_EVENT_RETENTION_DAYS
   value: {{ .Values.sentry.eventRetentionDays | quote }}
 - name: SENTRY_KAFKA_MAX_POLL_INTERVAL_MS
-  value: "300000"
+  value: {{ .Values.global.kafkaMaxPollIntervalMs | default "300000" | quote }}
 {{- end -}}
 
 {{/* File-based liveness probe used by Kafka consumers. */}}

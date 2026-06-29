@@ -16,6 +16,10 @@
         "nodeSelector": {
           "type": "object",
           "description": "Default nodeSelector applied to chart-owned workloads"
+        },
+        "kafkaMaxPollIntervalMs": {
+          "type": "string",
+          "description": "Kafka max poll interval in ms applied to all consumers (default: 300000)"
         }
       }
     },

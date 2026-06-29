@@ -59,7 +59,7 @@ spec:
             {{- $cmd := .command }}
             {{- if and .maxPollIntervalMs (semverCompare ">=26.6.0" $root.Chart.AppVersion) }}
             {{- $cmd = append $cmd "--max-poll-interval-ms" }}
-            {{- $cmd = append $cmd "300000" }}
+            {{- $cmd = append $cmd ($root.Values.global.kafkaMaxPollIntervalMs | default "300000") }}
             {{- end }}
             {{- toYaml $cmd | nindent 12 }}
           env:
