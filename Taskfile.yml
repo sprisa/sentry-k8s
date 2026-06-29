@@ -42,6 +42,15 @@ tasks:
       - for: ["errors-only", "errors-transactions", "feature-complete"]
         cmd: helm template {{.CHART}} . -n {{.NAMESPACE}} -f examples/values-{{.ITEM}}.yaml > /dev/null && echo "OK  {{.ITEM}}"
 
+  test-version-gates:
+    desc: Verify version-gated config (taskbroker format, max-poll-interval-ms, replacer health check)
+    cmds:
+      - bash scripts/verify-version-gates.sh
+
+  test:
+    desc: Run all validation checks in parallel (lint, render, version gates)
+    deps: [lint, test-render, test-version-gates]
+
   package:
     desc: Package the chart into a versioned .tgz
     cmds:
