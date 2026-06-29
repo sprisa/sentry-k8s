@@ -144,14 +144,6 @@ sentry:
     # sentry.system.url (e.g. https://sentry.example.com/js-sdk/%s/bundle%s.min.js).
     # Set this explicitly to override, e.g. to a CDN URL.
     defaultSdkUrl: ""
-    # Optional PVC for the downloaded JS SDK bundles. When enabled, the init
-    # container skips re-download across nginx restarts via a checksum marker
-    # (emptyDir re-downloads on every restart).
-    persistence:
-      enabled: false
-      size: 500Mi
-      accessMode: ReadWriteOnce
-      storageClass: ""
 
   # Extra pip packages installed into PYTHONUSERBASE (/data/custom-packages) via
   # an init container on every Sentry-image pod, instead of baking a custom

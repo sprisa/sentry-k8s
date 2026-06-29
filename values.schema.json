@@ -118,17 +118,7 @@
           "description": "JS SDK Loader — serve browser SDK bundles locally for plain <script> projects",
           "properties": {
             "setupAssets": { "type": "boolean", "description": "Download and serve JS SDK bundles from self-hosted Sentry" },
-            "defaultSdkUrl": { "type": "string", "description": "URL template for fetching bundles (used when setupAssets=true)" },
-            "persistence": {
-              "type": "object",
-              "description": "Optional PVC-backed storage for downloaded JS SDK bundles (skips re-download on restart)",
-              "properties": {
-                "enabled": { "type": "boolean" },
-                "size": { "type": "string" },
-                "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"] },
-                "storageClass": { "type": "string" }
-              }
-            }
+            "defaultSdkUrl": { "type": "string", "description": "URL template for fetching bundles (used when setupAssets=true)" }
           }
         },
         "extraPipPackages": { "type": "array", "items": { "type": "string" } },
