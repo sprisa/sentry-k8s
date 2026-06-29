@@ -10,7 +10,7 @@ type: application
 version: 0.5.0
 # renovate image=ghcr.io/getsentry/sentry
 # All getsentry images default to this tag for cross-service compatibility.
-appVersion: "26.5.2"
+appVersion: "26.6.0"
 keywords:
   - sentry
   - error-tracking

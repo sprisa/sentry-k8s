@@ -17,6 +17,10 @@ global:
   storageClass: ""
   # Default nodeSelector applied to chart-owned workloads (override per-component).
   nodeSelector: {}
+  # Kafka max poll interval in ms — applied to all Sentry/Snuba consumers
+  # when appVersion >= 26.6.0. Raise this if you see consumer rebalances
+  # during long batch processing.
+  kafkaMaxPollIntervalMs: "300000"
 
 nameOverride: ""
 fullnameOverride: ""
@@ -695,6 +699,7 @@ nginx:
   tolerations: []
   podAnnotations: {}
   clientMaxBodySize: 100m
+  proxyReadTimeout: 30s
   service:
     type: ClusterIP
     port: 80
