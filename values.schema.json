@@ -106,6 +106,14 @@
         "features": { "type": "object" },
         "config": { "type": "string" },
         "configYml": { "type": "object" },
+        "jsSdk": {
+          "type": "object",
+          "description": "JS SDK Loader — serve browser SDK bundles locally for plain <script> projects",
+          "properties": {
+            "setupAssets": { "type": "boolean", "description": "Download and serve JS SDK bundles from self-hosted Sentry" },
+            "defaultSdkUrl": { "type": "string", "description": "URL template for fetching bundles (used when setupAssets=true)" }
+          }
+        },
         "extraPipPackages": { "type": "array", "items": { "type": "string" } },
         "web": {
           "type": "object",

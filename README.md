@@ -360,6 +360,10 @@ The full value surface is documented inline in [`values.yaml`](./values.yaml).
 Highlights:
 
 - `sentry.selfHostedErrorsOnly`, `sentry.eventRetentionDays`, `sentry.system.url`
+- `sentry.jsSdk.setupAssets` — serve JS SDK bundles locally instead of from the CDN
+  (only affects plain `<script>` projects without a bundler; see
+  [JS SDK Loader](#js-sdk-loader))
+- `sentry.jsSdk.defaultSdkUrl` — CDN URL template used when `setupAssets` is `true`
 - per-component blocks (`enabled`, `replicas`, `resources`, `nodeSelector`,
   `affinity`, `tolerations`, `autoscaling`, …)
 - `clickhouse.*` (layout, keeper, settings/profiles, persistence)
@@ -367,6 +371,30 @@ Highlights:
   `external*` counterparts
 - `filestore` / `replay` / `nodestore` / `mail` storage backends
 - `nginx` routing proxy and the optional `ingress`
+
+### JS SDK Loader
+
+Sentry can serve the browser JS SDK bundles itself instead of loading them from
+`browser.sentry-cdn.com`. This applies **only to projects using the JS Loader**
+[`<script>` snippet](https://docs.sentry.io/platforms/javascript/install/lazy-load-sentry/)
+— plain HTML pages without a build system. Projects using `@sentry/browser` via
+npm/yarn are unaffected.
+
+```yaml
+sentry:
+  jsSdk:
+    setupAssets: true
+    defaultSdkUrl: "https://browser.sentry-cdn.com/%s/bundle%s.min.js"
+```
+
+- **`setupAssets: false` (default)** — Sentry returns a lightweight no-op loader
+  that redirects to the CDN.
+- **`setupAssets: true`** — Sentry downloads, caches, and serves the SDK bundles
+  itself, with no external CDN dependency. Toggle this on an existing deployment
+  at any time — a `helm upgrade` rolls the web pods and the bundles are served
+  immediately. No migration or project-side changes are needed.
+- **`defaultSdkUrl`** — CDN URL template used when `setupAssets` is `true`.
+  `%s` is replaced by the SDK version and bundle variant.
 
 ## Development & releasing (maintainers)
 

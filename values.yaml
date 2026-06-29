@@ -130,6 +130,14 @@ sentry:
   # Extra config.yml keys (map merged into config.yml)
   configYml: {}
 
+  # JS SDK Loader — serves the browser SDK bundle locally for plain <script> projects
+  jsSdk:
+    # When true, Sentry downloads and serves JS SDK bundles from self-hosted
+    # (Sentry returns a no-op CDN redirect loader when false).
+    setupAssets: false
+    # URL template used when setupAssets is true; %s = SDK version / bundle variant.
+    defaultSdkUrl: "https://browser.sentry-cdn.com/%s/bundle%s.min.js"
+
   # Extra pip packages installed into PYTHONUSERBASE (/data/custom-packages) via
   # an init container on every Sentry-image pod, instead of baking a custom
   # image. Useful for auth plugins, e.g. SSO with an OIDC provider:

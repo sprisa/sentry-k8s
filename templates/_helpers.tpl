@@ -349,6 +349,10 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
     secretKeyRef:
       name: {{ include "sentry.secretName" . }}
       key: system-secret-key
+{{- if .Values.sentry.jsSdk.setupAssets }}
+- name: SETUP_JS_SDK_ASSETS
+  value: "1"
+{{- end }}
 - name: LAUNCHPAD_RPC_SHARED_SECRET
   valueFrom:
     secretKeyRef:

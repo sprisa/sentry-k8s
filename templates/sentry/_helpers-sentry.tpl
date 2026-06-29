@@ -257,6 +257,10 @@ if SENTRY_STATSD_ADDR:
     SENTRY_METRICS_BACKEND = "sentry.metrics.statsd.StatsdMetricsBackend"
     SENTRY_METRICS_OPTIONS = {"host": host, "port": port}
 
+{{- if .Values.sentry.jsSdk.setupAssets }}
+JS_SDK_LOADER_DEFAULT_SDK_URL = {{ .Values.sentry.jsSdk.defaultSdkUrl | quote }}
+{{- end }}
+
 {{- if .Values.sentry.config }}
 
 # --- extra raw config (sentry.config) ---
