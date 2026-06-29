@@ -1,0 +1,20 @@
+{{- if and .Values.sentry.jsSdk.setupAssets .Values.sentry.jsSdk.persistence.enabled }}
+{{- $fullname := include "sentry.fullname" . }}
+{{- $sc := .Values.sentry.jsSdk.persistence.storageClass | default .Values.global.storageClass }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $fullname }}-js-sdk
+  labels:
+    {{- include "sentry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: js-sdk
+spec:
+  accessModes:
+    - {{ .Values.sentry.jsSdk.persistence.accessMode | default "ReadWriteOnce" }}
+  {{- if $sc }}
+  storageClassName: {{ $sc | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sentry.jsSdk.persistence.size | default "500Mi" }}
+{{- end }}
