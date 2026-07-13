@@ -47,9 +47,35 @@ tasks:
     cmds:
       - bash scripts/verify-version-gates.sh
 
+  test-mail:
+    desc: Verify SMTP secret rendering and invalid mail configuration
+    cmds:
+      - bash scripts/verify-mail.sh
+
+  test-upstream-release-tools:
+    desc: Verify the upstream release bump and PR-report helpers
+    cmds:
+      - bash scripts/test-upstream-release-tools.sh
+
   test:
-    desc: Run all validation checks in parallel (lint, render, version gates)
-    deps: [lint, test-render, test-version-gates]
+    desc: Run all validation checks in parallel
+    deps: [lint, test-render, test-version-gates, test-mail, test-upstream-release-tools]
+
+  update-appversion:
+    desc: Update the pinned Sentry app version (VERSION=major.minor.patch)
+    preconditions:
+      - sh: '[ -n "{{.VERSION}}" ]'
+        msg: "Set VERSION, e.g. task update-appversion VERSION=26.6.1"
+    cmds:
+      - bash scripts/bump-appversion.sh {{.VERSION}}
+
+  test-upstream-images:
+    desc: Verify all getsentry image manifests for VERSION
+    preconditions:
+      - sh: '[ -n "{{.VERSION}}" ]'
+        msg: "Set VERSION, e.g. task test-upstream-images VERSION=26.6.1"
+    cmds:
+      - bash scripts/verify-upstream-images.sh {{.VERSION}}
 
   package:
     desc: Package the chart into a versioned .tgz

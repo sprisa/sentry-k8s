@@ -1,0 +1,141 @@
+name: Upstream Sentry release checker
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-self-hosted-release
+  cancel-in-progress: false
+
+env:
+  TARGET_BRANCH: main
+  UPSTREAM_REPO: getsentry/self-hosted
+
+jobs:
+  check-and-create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out chart
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+
+      - name: Read current app version
+        id: current
+        run: |
+          VERSION="$(awk -F'"' '/^appVersion:/ { print $2; exit }' Chart.yaml)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch stable upstream releases
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate --slurp "/repos/${UPSTREAM_REPO}/releases?per_page=100" \
+            | jq 'flatten' > "$RUNNER_TEMP/releases.json"
+          VERSION="$(
+            jq -r '
+              [
+                .[]
+                | select(.draft == false and .prerelease == false)
+                | .tag_name
+                | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              ]
+              | sort_by(split(".") | map(tonumber))
+              | last // empty
+            ' "$RUNNER_TEMP/releases.json"
+          )"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Skip when up to date
+        if: steps.current.outputs.version == steps.upstream.outputs.version
+        run: echo "::notice::Sentry self-hosted is up to date (${{ steps.current.outputs.version }})"
+
+      - name: Prepare update branch
+        if: steps.current.outputs.version != steps.upstream.outputs.version
+        env:
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
+          TARGET_VERSION: ${{ steps.upstream.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="automation/sentry-v${TARGET_VERSION}"
+          git fetch origin "$TARGET_BRANCH"
+          git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+          if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+            git switch --create "$BRANCH" --track "origin/${BRANCH}"
+          else
+            git switch --create "$BRANCH" "origin/${TARGET_BRANCH}"
+          fi
+          bash scripts/bump-appversion.sh "$TARGET_VERSION"
+          git diff --quiet -- Chart.yaml && {
+            echo "skip_update=true" >> "$GITHUB_ENV"
+            exit 0
+          }
+          gh api "repos/${UPSTREAM_REPO}/compare/${CURRENT_VERSION}...${TARGET_VERSION}" \
+            --jq '.files[].filename' > "$RUNNER_TEMP/changed-files.txt"
+          node scripts/build-upstream-pr-report.mjs \
+            --current "$CURRENT_VERSION" \
+            --target "$TARGET_VERSION" \
+            --releases-json "$RUNNER_TEMP/releases.json" \
+            --changed-files "$RUNNER_TEMP/changed-files.txt" \
+            --body-file "$RUNNER_TEMP/pr-body.md" \
+            --metadata-file "$RUNNER_TEMP/pr-metadata.json"
+          echo "branch=$BRANCH" >> "$GITHUB_ENV"
+          echo "draft=$(jq -r '.draft' "$RUNNER_TEMP/pr-metadata.json")" >> "$GITHUB_ENV"
+
+      - name: Verify upstream image manifests
+        if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
+        run: bash scripts/verify-upstream-images.sh "${{ steps.upstream.outputs.version }}"
+
+      - name: Test chart update
+        if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
+        run: task test
+
+      - name: Mint release-bot token
+        if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Commit, push, and open pull request
+        if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_VERSION: ${{ steps.upstream.outputs.version }}
+        run: |
+          git config user.name "sentry-release-bot[bot]"
+          git config user.email "sentry-release-bot[bot]@users.noreply.github.com"
+          git add Chart.yaml
+          git commit -m "chore: update Sentry self-hosted to ${TARGET_VERSION}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${BRANCH}"
+
+          PR_NUMBER="$(
+            gh pr list --head "$BRANCH" --base "$TARGET_BRANCH" --state open \
+              --json number --jq '.[0].number'
+          )"
+          TITLE="chore: update Sentry self-hosted to ${TARGET_VERSION}"
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+          elif [ "$draft" = "true" ]; then
+            gh pr create --base "$TARGET_BRANCH" --head "$BRANCH" --title "$TITLE" \
+              --body-file "$RUNNER_TEMP/pr-body.md" --draft
+          else
+            gh pr create --base "$TARGET_BRANCH" --head "$BRANCH" --title "$TITLE" \
+              --body-file "$RUNNER_TEMP/pr-body.md"
+          fi

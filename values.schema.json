@@ -769,6 +769,8 @@
         "username": { "type": "string" },
         "password": { "type": "string" },
         "existingSecret": { "type": "string" },
+        "existingSecretUsernameKey": { "type": "string" },
+        "existingSecretPasswordKey": { "type": "string" },
         "useTls": { "type": "boolean" },
         "useSsl": { "type": "boolean" },
         "from": { "type": "string" }

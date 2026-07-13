@@ -680,7 +680,12 @@ mail:
   port: 587
   username: ""
   password: ""
+  # Existing Kubernetes Secret containing SMTP credentials. When supplied, it
+  # takes precedence over username/password and is injected into every Sentry
+  # application workload rather than written into a ConfigMap.
   existingSecret: ""
+  existingSecretUsernameKey: username
+  existingSecretPasswordKey: password
   useTls: true
   useSsl: false
   from: ""

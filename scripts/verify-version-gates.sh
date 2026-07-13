@@ -3,9 +3,14 @@ set -euo pipefail
 CHART=${CHART:-sentry-k8s}
 NAMESPACE=${NAMESPACE:-sentry}
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || realpath "$(dirname "$0")/..")
-CHART_FILE="$REPO_ROOT/Chart.yaml"
 RENDER_DIR=$(mktemp -d)
 trap 'rm -rf "$RENDER_DIR"' EXIT
+TEST_CHART_DIR="$RENDER_DIR/chart"
+mkdir -p "$TEST_CHART_DIR"
+# Keep the source checkout immutable so this script is safe alongside the other
+# parallel `task test` checks.
+tar -C "$REPO_ROOT" --exclude=.git -cf - . | tar -C "$TEST_CHART_DIR" -xf -
+CHART_FILE="$TEST_CHART_DIR/Chart.yaml"
 
 INFO() { echo "--- $*"; }
 PASS() { echo "  PASS  $*"; }
@@ -13,7 +18,17 @@ FAIL() { echo "  FAIL  $*"; fail=1; }
 fail=0
 
 set_appver() {
-  sed -i 's/^appVersion:.*/appVersion: "'"$1"'"/' "$CHART_FILE"
+  node - "$CHART_FILE" "$1" <<'NODE'
+const fs = require("node:fs");
+
+const [chartFile, version] = process.argv.slice(2);
+const contents = fs.readFileSync(chartFile, "utf8");
+if (!/^appVersion:.*$/m.test(contents)) {
+  throw new Error("appVersion not found in Chart.yaml");
+}
+const updated = contents.replace(/^appVersion:.*$/m, `appVersion: "${version}"`);
+fs.writeFileSync(chartFile, updated);
+NODE
 }
 
 render() {
@@ -22,8 +37,8 @@ render() {
   saved_ver=$(grep '^appVersion:' "$CHART_FILE" | awk '{print $2}' | tr -d '"')
   set_appver "$appver"
   for preset in errors-only errors-transactions feature-complete; do
-    helm template "$CHART" "$REPO_ROOT" -n "$NAMESPACE" \
-      -f "$REPO_ROOT/examples/values-${preset}.yaml" \
+    helm template "$CHART" "$TEST_CHART_DIR" -n "$NAMESPACE" \
+      -f "$TEST_CHART_DIR/examples/values-${preset}.yaml" \
       2>"$RENDER_DIR/${label}_${preset}.stderr" \
       > "$RENDER_DIR/${label}_${preset}.yaml"
     if [ -s "$RENDER_DIR/${label}_${preset}.stderr" ]; then

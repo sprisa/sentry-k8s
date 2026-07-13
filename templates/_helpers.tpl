@@ -182,6 +182,19 @@ memcached:11211
 {{- printf "%s-secrets" (include "sentry.fullname" .) -}}
 {{- end -}}
 
+{{/* SMTP credentials either come from a caller-managed Secret or the chart Secret. */}}
+{{- define "sentry.mail.secretName" -}}
+{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecret }}{{- else -}}{{ include "sentry.secretName" . }}{{- end -}}
+{{- end -}}
+
+{{- define "sentry.mail.usernameKey" -}}
+{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecretUsernameKey | default "username" }}{{- else -}}mail-username{{- end -}}
+{{- end -}}
+
+{{- define "sentry.mail.passwordKey" -}}
+{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecretPasswordKey | default "password" }}{{- else -}}mail-password{{- end -}}
+{{- end -}}
+
 {{- define "sentry.storageClass" -}}
 {{- .storageClass | default .root.Values.global.storageClass -}}
 {{- end -}}
@@ -348,6 +361,18 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
 {{- if .Values.sentry.system.url }}
 - name: SENTRY_MAIL_HOST
   value: {{ regexReplaceAll "^https?://" .Values.sentry.system.url "" | quote }}
+{{- end }}
+{{- if and .Values.mail.enabled (or .Values.mail.existingSecret (and .Values.mail.username .Values.mail.password)) }}
+- name: SENTRY_MAIL_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "sentry.mail.secretName" . }}
+      key: {{ include "sentry.mail.usernameKey" . }}
+- name: SENTRY_MAIL_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "sentry.mail.secretName" . }}
+      key: {{ include "sentry.mail.passwordKey" . }}
 {{- end }}
 - name: SENTRY_SECRET_KEY
   valueFrom:

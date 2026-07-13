@@ -65,4 +65,5 @@ kafka:
 #   username: apikey
 #   password: ""
 #   useTls: true
+#   useSsl: false
 #   from: sentry@example.com

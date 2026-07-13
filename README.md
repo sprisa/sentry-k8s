@@ -422,8 +422,8 @@ PR refs turned into links). Preview them anytime with `task notes`.
 Cutting a release:
 
 ```bash
-# 1. bump `version:` in Chart.yaml (and `appVersion:` if the Sentry version changed),
-#    then COMMIT AND PUSH to main — `gh release create` tags the remote's HEAD.
+# 1. bump `version:` in Chart.yaml (and `appVersion:` if required), then
+#    COMMIT AND PUSH to main — `gh release create` tags the remote's HEAD.
 git commit -am "release: v0.2.0" && git push
 
 # 2. authenticate: Helm to GHCR (PAT w/ write:packages) + the GitHub CLI for the release
