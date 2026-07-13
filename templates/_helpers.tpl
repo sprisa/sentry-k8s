@@ -182,17 +182,17 @@ memcached:11211
 {{- printf "%s-secrets" (include "sentry.fullname" .) -}}
 {{- end -}}
 
-{{/* SMTP credentials either come from a caller-managed Secret or the chart Secret. */}}
+{{/* SMTP credentials come from a caller-managed or dedicated chart-managed Secret. */}}
 {{- define "sentry.mail.secretName" -}}
-{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecret }}{{- else -}}{{ include "sentry.secretName" . }}{{- end -}}
+{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecret }}{{- else -}}{{ printf "%s-mail" (include "sentry.fullname" .) }}{{- end -}}
 {{- end -}}
 
 {{- define "sentry.mail.usernameKey" -}}
-{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecretUsernameKey | default "username" }}{{- else -}}mail-username{{- end -}}
+{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecretUsernameKey | default "username" }}{{- else -}}username{{- end -}}
 {{- end -}}
 
 {{- define "sentry.mail.passwordKey" -}}
-{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecretPasswordKey | default "password" }}{{- else -}}mail-password{{- end -}}
+{{- if .Values.mail.existingSecret -}}{{ .Values.mail.existingSecretPasswordKey | default "password" }}{{- else -}}password{{- end -}}
 {{- end -}}
 
 {{- define "sentry.storageClass" -}}

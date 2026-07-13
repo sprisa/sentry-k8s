@@ -132,8 +132,9 @@ render "$inline" \
   --set mail.useTls=true \
   --set mail.useSsl=false
 
-expect_present "$inline" "inline username stored in Secret" "mail-username: \"$(printf '%s' inline-user | base64)\""
-expect_present "$inline" "inline password stored in Secret" "mail-password: \"$(printf '%s' inline-password | base64)\""
+expect_present "$inline" "inline credentials use dedicated Secret" "name: sentry-k8s-mail"
+expect_present "$inline" "inline username stored in Secret" "username: \"$(printf '%s' inline-user | base64)\""
+expect_present "$inline" "inline password stored in Secret" "password: \"$(printf '%s' inline-password | base64)\""
 inline_config="$RENDER_DIR/inline-configmap.yaml"
 config_map "$inline" >"$inline_config"
 expect_absent "$inline_config" "inline username absent from ConfigMap" "inline-user"
@@ -143,8 +144,7 @@ disabled="$RENDER_DIR/disabled.yaml"
 render "$disabled"
 expect_absent "$disabled" "disabled mail has no username env" "SENTRY_MAIL_USERNAME"
 expect_absent "$disabled" "disabled mail has no password env" "SENTRY_MAIL_PASSWORD"
-expect_absent "$disabled" "disabled mail has no generated username key" "mail-username:"
-expect_absent "$disabled" "disabled mail has no generated password key" "mail-password:"
+expect_absent "$disabled" "disabled mail has no dedicated Secret" "app.kubernetes.io/component: mail"
 
 expect_failure "mail host required" --set mail.enabled=true
 expect_failure "mail TLS and SSL conflict" \

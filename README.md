@@ -244,6 +244,7 @@ mail:
   username: apikey
   password: ""          # or existingSecret
   useTls: true
+  useSsl: false
   from: sentry@example.com
 ```
 
