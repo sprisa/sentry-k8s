@@ -79,7 +79,8 @@ images:
   # Helper images used by init containers / waits / cleanup.
   busybox:
     repository: busybox
-    tag: "1.36"
+    # Relay copies this binary into its distroless image, so it must be static.
+    tag: "1.36.1-musl"
     pullPolicy: IfNotPresent
 
 # -----------------------------------------------------------------------------

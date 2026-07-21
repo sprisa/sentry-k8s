@@ -71,6 +71,7 @@ expect_count "$single" "single broker has three semantic probes" "--unavailable-
 expect_present "$single" "single broker has startup probe" "startupProbe:"
 expect_present "$single" "probe JVM heap is constrained" 'KAFKA_HEAP_OPTS="-Xms32m -Xmx64m"'
 expect_present "$single" "Relay receives BusyBox probe tools" "cp /bin/busybox /probe/busybox"
+expect_present "$single" "Relay probe tools use static BusyBox" 'image: "busybox:1.36.1-musl"'
 expect_present "$single" "Relay readiness checks ready endpoint" "/api/relay/healthcheck/ready/"
 expect_present "$single" "Relay probes readiness-gated Kafka Service" "nc -z -w 3 sentry-k8s-kafka 9092"
 expect_present "$single" "Relay records a Kafka outage" "touch /probe-state/kafka-unavailable"
