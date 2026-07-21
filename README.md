@@ -220,6 +220,32 @@ Notes:
   incompatibilities with Redis 7 / Valkey.
 - **Kafka** changing `replicas` after first boot needs manual KRaft quorum steps;
   pick your broker count up front.
+- **Kafka health and Relay recovery:** `kafka.semanticProbes.mode: auto` uses the
+  Kafka image's `kafka-topics --describe --unavailable-partitions` for startup,
+  readiness, and sustained liveness when the bundled topology has one broker.
+  The command must succeed and return no unavailable partitions. Its probe JVM
+  is bounded by `kafka.semanticProbes.heapOpts`. Multi-broker KRaft keeps the
+  existing per-broker TCP probes because a cluster-wide unavailable-partition
+  liveness check could restart every healthy broker; external Kafka is unchanged.
+- **Relay Kafka recovery:** Relay explicitly enables librdkafka rebootstrap and
+  configurable metadata refresh intervals under `relay.kafka`. In the default
+  `relay.kafka.healthProbes.mode: auto`, only bundled single-broker installs get
+  composite Relay/Kafka probes. A BusyBox binary is copied into an `emptyDir` so
+  the distroless Relay container can check both its existing health endpoint and
+  the readiness-gated Kafka Service. Readiness fails immediately when Kafka has
+  no ready endpoint. The probe records that outage in a pod-local `emptyDir`, so
+  liveness still restarts Relay after about five minutes if Kafka recovers first;
+  a `postStart` hook clears the marker on the new Relay container. HA and external
+  Kafka retain Relay-only probes unless explicitly enabled.
+- `relay.kafka.validateTopics` defaults to `false`. The non-hook bootstrap Job
+  creates Snuba topics and then Sentry topics, but the Relay Deployment may start
+  concurrently after infrastructure becomes reachable. Enabling validation by
+  default would therefore create a fresh-install race; enable it when topics are
+  provisioned before Relay.
+- Relay's Kafka outage marker is pod-local and cleared by a BusyBox `postStart`
+  hook on every Relay container start. If Kafka remains unavailable the readiness
+  probe records it again; once Kafka is healthy, the restarted Relay gets one
+  clean producer initialization rather than entering a permanent restart loop.
 - **Memcached** is a pure cache; running >1 replica behind one Service VIP is not
   real sharding (it round-robins), so it stays single-node.
 

@@ -162,6 +162,28 @@ Component-level override of repository/tag wins; tag falls back to Chart.AppVers
 {{- end -}}
 {{- end -}}
 
+{{/* Semantic broker probes are safe only when one bundled broker owns every partition. */}}
+{{- define "sentry.kafka.semanticProbesEnabled" -}}
+{{- $mode := .Values.kafka.semanticProbes.mode | default "auto" -}}
+{{- $singleBroker := eq (int (.Values.kafka.replicas | default 1)) 1 -}}
+{{- if and (eq $mode "semantic") (not $singleBroker) -}}
+{{- fail "kafka.semanticProbes.mode=semantic requires kafka.replicas=1; use auto or tcp for HA" -}}
+{{- end -}}
+{{- if and .Values.kafka.enabled $singleBroker (ne $mode "tcp") -}}true{{- end -}}
+{{- end -}}
+
+{{- define "sentry.kafka.probeHost" -}}
+{{- if .Values.kafka.enabled -}}
+{{- printf "%s-kafka" (include "sentry.fullname" .) -}}
+{{- else -}}
+{{- (first .Values.externalKafka.brokers).host -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "sentry.kafka.probePort" -}}
+{{- if .Values.kafka.enabled -}}9092{{- else -}}{{ (first .Values.externalKafka.brokers).port | default 9092 }}{{- end -}}
+{{- end -}}
+
 {{- define "sentry.memcached.host" -}}
 {{- if .Values.memcached.enabled -}}
 {{- printf "%s-memcached:11211" (include "sentry.fullname" .) -}}

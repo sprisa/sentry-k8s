@@ -52,6 +52,11 @@ tasks:
     cmds:
       - bash scripts/verify-mail.sh
 
+  test-kafka-recovery:
+    desc: Verify Kafka semantic probes, Relay recovery coupling, overrides, and schema guards
+    cmds:
+      - bash scripts/verify-kafka-recovery.sh
+
   test-upstream-release-tools:
     desc: Verify the upstream release bump and PR-report helpers
     cmds:
@@ -59,7 +64,7 @@ tasks:
 
   test:
     desc: Run all validation checks in parallel
-    deps: [lint, test-render, test-version-gates, test-mail, test-upstream-release-tools]
+    deps: [lint, test-render, test-version-gates, test-mail, test-kafka-recovery, test-upstream-release-tools]
 
   update-appversion:
     desc: Update the pinned Sentry app version (VERSION=major.minor.patch)

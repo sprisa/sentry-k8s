@@ -310,6 +310,35 @@ relay:
   affinity: {}
   tolerations: []
   podAnnotations: {}
+  kafka:
+    # Relay and the bootstrap Job start independently. Keep validation off unless
+    # topics are provisioned before Relay starts (the Job creates them later).
+    validateTopics: false
+    # librdkafka producer recovery controls. Rebootstrap prevents a producer from
+    # remaining attached to stale broker metadata after a complete outage.
+    metadataRecoveryStrategy: rebootstrap
+    metadataRecoveryRebootstrapTriggerMs: 30000
+    topicMetadataRefreshIntervalMs: 30000
+    metadataMaxAgeMs: 90000
+    healthProbes:
+      # auto: couple Relay health to Kafka only for bundled single-broker Kafka.
+      # enabled: opt in explicitly for another topology; disabled: Relay-only health.
+      mode: auto
+      readiness:
+        initialDelaySeconds: 15
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 1
+        successThreshold: 1
+      # A Kafka readiness failure is remembered until Relay restarts. Twenty
+      # consecutive liveness failures restart it once after about five minutes,
+      # refreshing a producer that did not recover when Kafka came back.
+      liveness:
+        initialDelaySeconds: 30
+        periodSeconds: 15
+        timeoutSeconds: 3
+        failureThreshold: 20
+        successThreshold: 1
   service:
     annotations: {}
   autoscaling:
@@ -465,6 +494,31 @@ kafka:
   logRetentionHours: 24
   logLevel: WARN
   heapOpts: ""
+  semanticProbes:
+    # auto: semantic probes for one bundled broker, TCP probes for HA. semantic
+    # explicitly requires replicas=1; tcp restores the previous probes.
+    mode: auto
+    # kafka-topics starts a JVM for each exec probe; bound its transient heap.
+    heapOpts: "-Xms32m -Xmx64m"
+    startup:
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 30
+      successThreshold: 1
+    readiness:
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 1
+      successThreshold: 1
+    # Sustained semantic failure is required before restarting the broker.
+    liveness:
+      initialDelaySeconds: 0
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 6
+      successThreshold: 1
   # Extra raw KAFKA_* env (e.g. {KAFKA_NUM_PARTITIONS: "3"}).
   extraEnv: {}
   persistence:

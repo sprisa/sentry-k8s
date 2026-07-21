@@ -1,6 +1,12 @@
 {{- $fullname := include "sentry.fullname" . }}
 {{- $c := .Values.relay }}
 {{- if (ne $c.enabled false) }}
+{{- $kafkaHealthMode := $c.kafka.healthProbes.mode | default "auto" }}
+{{- $autoKafkaHealth := and .Values.kafka.enabled (eq (int (.Values.kafka.replicas | default 1)) 1) }}
+{{- $kafkaHealth := or (eq $kafkaHealthMode "enabled") (and (eq $kafkaHealthMode "auto") $autoKafkaHealth) }}
+{{- if and $kafkaHealth (not .Values.kafka.enabled) (eq (len .Values.externalKafka.brokers) 0) }}
+{{- fail "relay.kafka.healthProbes.mode=enabled requires kafka.enabled=true or at least one externalKafka broker" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,9 +24,14 @@ data:
       level: WARN
     processing:
       enabled: true
+      kafka_validate_topics: {{ $c.kafka.validateTopics }}
       kafka_config:
         - {name: "bootstrap.servers", value: "{{ include "sentry.kafka.bootstrap" . }}"}
         - {name: "message.max.bytes", value: {{ .Values.kafka.maxMessageBytes | default 50000000 | int64 }}}
+        - {name: "metadata.recovery.strategy", value: {{ $c.kafka.metadataRecoveryStrategy | quote }}}
+        - {name: "metadata.recovery.rebootstrap.trigger.ms", value: {{ $c.kafka.metadataRecoveryRebootstrapTriggerMs }}}
+        - {name: "topic.metadata.refresh.interval.ms", value: {{ $c.kafka.topicMetadataRefreshIntervalMs }}}
+        - {name: "metadata.max.age.ms", value: {{ $c.kafka.metadataMaxAgeMs }}}
       redis: redis://{{ include "sentry.redis.host" . }}:{{ include "sentry.redis.port" . }}
     health:
       max_memory_percent: 1.0
@@ -45,7 +56,7 @@ spec:
         {{- include "sentry.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: relay
       annotations:
-        checksum/config: {{ printf "%s|%s|%v" (include "sentry.kafka.bootstrap" .) (include "sentry.redis.host" .) .Values.kafka.maxMessageBytes | sha256sum }}
+        checksum/config: {{ printf "%s|%s|%v|%s" (include "sentry.kafka.bootstrap" .) (include "sentry.redis.host" .) .Values.kafka.maxMessageBytes (toJson $c.kafka) | sha256sum }}
         {{- with $c.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
       serviceAccountName: {{ include "sentry.serviceAccountName" . }}
@@ -53,6 +64,15 @@ spec:
       {{- include "sentry.scheduling" (dict "root" . "component" $c) | nindent 6 }}
       initContainers:
         {{- include "sentry.waitForInfra" (dict "root" . "deps" (list "kafka" "redis")) | nindent 8 }}
+        {{- if $kafkaHealth }}
+        - name: relay-probe-tools
+          image: "{{ include "sentry.image" (dict "root" . "key" "busybox") }}"
+          imagePullPolicy: {{ include "sentry.imagePullPolicy" (dict "root" . "key" "busybox") }}
+          command: ["/bin/sh", "-ec", "cp /bin/busybox /probe/busybox && chmod 0555 /probe/busybox"]
+          volumeMounts:
+            - name: relay-probe-tools
+              mountPath: /probe
+        {{- end }}
         # The relay image is distroless (no shell), so we can't cp/conditionally
         # run. config.yml is mounted directly via subPath; credentials are
         # (re)generated into the emptyDir each start (--overwrite => idempotent).
@@ -84,6 +104,46 @@ spec:
             - name: relay-config
               mountPath: /work/.relay/config.yml
               subPath: config.yml
+            {{- if $kafkaHealth }}
+            - name: relay-probe-tools
+              mountPath: /probe
+              readOnly: true
+            - name: relay-probe-state
+              mountPath: /probe-state
+            {{- end }}
+          {{- if $kafkaHealth }}
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/probe/busybox", "rm", "-f", "/probe-state/kafka-unavailable"]
+          livenessProbe:
+            exec:
+              command:
+                - /probe/busybox
+                - sh
+                - -ec
+                - |
+                  /probe/busybox wget -q -T {{ $c.kafka.healthProbes.liveness.timeoutSeconds }} -O /dev/null http://127.0.0.1:3000/api/relay/healthcheck/live/
+                  test ! -e /probe-state/kafka-unavailable
+                  if ! /probe/busybox nc -z -w {{ $c.kafka.healthProbes.liveness.timeoutSeconds }} {{ include "sentry.kafka.probeHost" . }} {{ include "sentry.kafka.probePort" . }}; then
+                    /probe/busybox touch /probe-state/kafka-unavailable
+                    exit 1
+                  fi
+            {{- toYaml $c.kafka.healthProbes.liveness | nindent 12 }}
+          readinessProbe:
+            exec:
+              command:
+                - /probe/busybox
+                - sh
+                - -ec
+                - |
+                  /probe/busybox wget -q -T {{ $c.kafka.healthProbes.readiness.timeoutSeconds }} -O /dev/null http://127.0.0.1:3000/api/relay/healthcheck/ready/
+                  if ! /probe/busybox nc -z -w {{ $c.kafka.healthProbes.readiness.timeoutSeconds }} {{ include "sentry.kafka.probeHost" . }} {{ include "sentry.kafka.probePort" . }}; then
+                    /probe/busybox touch /probe-state/kafka-unavailable
+                    exit 1
+                  fi
+            {{- toYaml $c.kafka.healthProbes.readiness | nindent 12 }}
+          {{- else }}
           livenessProbe:
             httpGet:
               path: /api/relay/healthcheck/live/
@@ -100,6 +160,7 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 10
             failureThreshold: 6
+          {{- end }}
           {{- with $c.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -110,6 +171,12 @@ spec:
         - name: relay-config
           configMap:
             name: {{ $fullname }}-relay-config
+        {{- if $kafkaHealth }}
+        - name: relay-probe-tools
+          emptyDir: {}
+        - name: relay-probe-state
+          emptyDir: {}
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

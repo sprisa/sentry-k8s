@@ -282,6 +282,28 @@
         "affinity": { "type": "object" },
         "tolerations": { "type": "array" },
         "podAnnotations": { "type": "object" },
+        "kafka": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "validateTopics": { "type": "boolean" },
+            "metadataRecoveryStrategy": { "type": "string", "enum": ["none", "rebootstrap"] },
+            "metadataRecoveryRebootstrapTriggerMs": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+            "topicMetadataRefreshIntervalMs": { "type": "integer", "minimum": -1, "maximum": 3600000 },
+            "metadataMaxAgeMs": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+            "healthProbes": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": { "type": "string", "enum": ["auto", "enabled", "disabled"] },
+                "readiness": { "$ref": "#/definitions/readinessProbeTiming" },
+                "liveness": { "$ref": "#/definitions/probeTiming" }
+              },
+              "required": ["mode", "readiness", "liveness"]
+            }
+          },
+          "required": ["validateTopics", "metadataRecoveryStrategy", "metadataRecoveryRebootstrapTriggerMs", "topicMetadataRefreshIntervalMs", "metadataMaxAgeMs", "healthProbes"]
+        },
         "service": { "type": "object", "properties": { "annotations": { "type": "object" } } },
         "autoscaling": {
           "type": "object",
@@ -465,6 +487,18 @@
         "logRetentionHours": { "type": "integer" },
         "logLevel": { "type": "string" },
         "heapOpts": { "type": "string" },
+        "semanticProbes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "type": "string", "enum": ["auto", "semantic", "tcp"] },
+            "heapOpts": { "type": "string", "minLength": 1 },
+            "startup": { "$ref": "#/definitions/probeTiming" },
+            "readiness": { "$ref": "#/definitions/readinessProbeTiming" },
+            "liveness": { "$ref": "#/definitions/probeTiming" }
+          },
+          "required": ["mode", "heapOpts", "startup", "readiness", "liveness"]
+        },
         "extraEnv": { "type": "object" },
         "persistence": {
           "type": "object",
@@ -832,6 +866,32 @@
           }
         }
       }
+    }
+  },
+  "definitions": {
+    "probeTiming": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "const": 1 }
+      },
+      "required": ["initialDelaySeconds", "periodSeconds", "timeoutSeconds", "failureThreshold", "successThreshold"]
+    },
+    "readinessProbeTiming": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["initialDelaySeconds", "periodSeconds", "timeoutSeconds", "failureThreshold", "successThreshold"]
     }
   },
   "required": ["global"]
