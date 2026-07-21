@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: upstream-self-hosted-release
@@ -102,8 +103,22 @@ jobs:
         if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
         run: task test
 
-      - name: Mint release-bot token
+      - name: Select authentication
         if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
+        id: auth
+        env:
+          APP_ID: ${{ vars.RELEASE_BOT_APP_ID }}
+          PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+        run: |
+          if [ -n "$APP_ID" ] && [ -n "$PRIVATE_KEY" ]; then
+            echo "use-app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "use-app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release-bot credentials are unavailable; using GITHUB_TOKEN"
+          fi
+
+      - name: Mint release-bot token
+        if: steps.auth.outputs.use-app == 'true'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -115,7 +130,7 @@ jobs:
       - name: Commit, push, and open pull request
         if: steps.current.outputs.version != steps.upstream.outputs.version && env.skip_update != 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           TARGET_VERSION: ${{ steps.upstream.outputs.version }}
         run: |
           git config user.name "sentry-release-bot[bot]"
