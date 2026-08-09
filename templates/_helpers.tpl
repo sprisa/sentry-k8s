@@ -417,6 +417,9 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
     secretKeyRef:
       name: {{ include "sentry.secretName" . }}
       key: launchpad-rpc-shared-secret
+{{/* S3 credentials are shared through AWS_* env vars. When filestore is not
+     using S3, nodestore supplies the credentials for a nodestore-only setup. */}}
+{{- if or (eq .Values.filestore.backend "s3") (eq .Values.nodestore.backend "s3") }}
 {{- if eq .Values.filestore.backend "s3" }}
 {{- if .Values.filestore.s3.existingSecret }}
 - name: AWS_ACCESS_KEY_ID
@@ -434,6 +437,23 @@ install. Only meaningful for Sentry-image pods. Input: $ (root).
   value: {{ .Values.filestore.s3.accessKey | quote }}
 - name: AWS_SECRET_ACCESS_KEY
   value: {{ .Values.filestore.s3.secretKey | quote }}
+{{- end }}
+{{- else if .Values.nodestore.s3.existingSecret }}
+- name: AWS_ACCESS_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.nodestore.s3.existingSecret }}
+      key: AWS_ACCESS_KEY_ID
+- name: AWS_SECRET_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.nodestore.s3.existingSecret }}
+      key: AWS_SECRET_ACCESS_KEY
+{{- else }}
+- name: AWS_ACCESS_KEY_ID
+  value: {{ .Values.nodestore.s3.accessKey | quote }}
+- name: AWS_SECRET_ACCESS_KEY
+  value: {{ .Values.nodestore.s3.secretKey | quote }}
 {{- end }}
 {{- end }}
 {{- end -}}

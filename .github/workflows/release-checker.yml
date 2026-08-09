@@ -92,7 +92,7 @@ jobs:
             --changed-files "$RUNNER_TEMP/changed-files.txt" \
             --body-file "$RUNNER_TEMP/pr-body.md" \
             --metadata-file "$RUNNER_TEMP/pr-metadata.json"
-          echo "branch=$BRANCH" >> "$GITHUB_ENV"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
           echo "draft=$(jq -r '.draft' "$RUNNER_TEMP/pr-metadata.json")" >> "$GITHUB_ENV"
 
       - name: Verify upstream image manifests

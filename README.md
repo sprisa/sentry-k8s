@@ -166,11 +166,13 @@ volumes.
 
 ### Filesystem vs S3/R2 (the trade-off)
 
-- **S3/R2 (recommended, HA):** filestore/nodestore/replays/profiles go to
+- **S3/R2 (recommended, HA):** filestore/nodestore/replays/profiles can go to
   external object storage → highly available, no large RWX volumes, survives
-  cluster loss. Set `filestore.backend: s3` (plus `replay`, `nodestore`,
-  `filestore.profiles`) with an `existingSecret` holding `AWS_ACCESS_KEY_ID` /
-  `AWS_SECRET_ACCESS_KEY` (works great with Cloudflare R2 via `endpointUrl`).
+  cluster loss. For raw event payloads only, set `nodestore.backend: s3`
+  independently of `filestore.backend`; the Secret must hold
+  `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (works great with Cloudflare R2
+  via `endpointUrl`). The feature-complete example shows the combined
+  filestore, replay, profiles, and nodestore configuration.
 - **Filesystem (simple/dev):** blobs live on a PVC. On a single node,
   `ReadWriteOnce` + `filestore.filesystem.persistence.persistentWorkers: true`
   works if web/worker/cron pods are pinned to the same node (via `nodeSelector`).

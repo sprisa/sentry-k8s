@@ -719,7 +719,8 @@ replay:
     gcs: {}
 
 nodestore:
-  # "" => default (uses filestore/db). "s3" installs sentry-nodestore-s3.
+  # "" => default (uses Postgres). "s3" installs sentry-nodestore-s3 and
+  # can be used independently of filestore.backend.
   backend: ""
   s3:
     existingSecret: ""

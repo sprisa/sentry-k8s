@@ -84,7 +84,7 @@ consumer_has_flag() {
     FAIL "$label: no match for '$consumer_pattern' in file ($(wc -l < "$file") lines)"
     return
   fi
-  if echo "$ctx" | grep -q -e "--max-poll-interval-ms"; then
+  if grep -q -e "--max-poll-interval-ms" <<<"$ctx"; then
     PASS "$label"
   else
     FAIL "$label: '$consumer_pattern' matched but no --max-poll-interval-ms in context"
@@ -94,7 +94,7 @@ consumer_lacks_flag() {
   local file="$1" label="$2" consumer_pattern="$3"
   local ctx
   ctx=$(grep -A 30 -e "$consumer_pattern" "$file" 2>/dev/null)
-  if echo "$ctx" | grep -q -e "--max-poll-interval-ms"; then
+  if grep -q -e "--max-poll-interval-ms" <<<"$ctx"; then
     FAIL "$label: $consumer_pattern unexpectedly has --max-poll-interval-ms"
   else
     PASS "$label"

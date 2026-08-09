@@ -52,6 +52,11 @@ tasks:
     cmds:
       - bash scripts/verify-mail.sh
 
+  test-storage-backends:
+    desc: Verify independent S3/R2 storage backend rendering
+    cmds:
+      - bash scripts/verify-storage-backends.sh
+
   test-kafka-recovery:
     desc: Verify Kafka semantic probes, Relay recovery coupling, overrides, and schema guards
     cmds:
@@ -64,7 +69,7 @@ tasks:
 
   test:
     desc: Run all validation checks in parallel
-    deps: [lint, test-render, test-version-gates, test-mail, test-kafka-recovery, test-upstream-release-tools]
+    deps: [lint, test-render, test-version-gates, test-mail, test-storage-backends, test-kafka-recovery, test-upstream-release-tools]
 
   update-appversion:
     desc: Update the pinned Sentry app version (VERSION=major.minor.patch)
