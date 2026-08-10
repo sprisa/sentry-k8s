@@ -1,5 +1,6 @@
 {{/* Sentry task system + Kafka ingest/forwarder/subscription consumers. */}}
 {{- $tb := printf "%s-taskbroker:50051" (include "sentry.fullname" .) }}
+{{- $legacySubscriptionConsumers := semverCompare "<26.7.0" .Chart.AppVersion }}
 
 {{- /* ---------- task system (errors-only) ---------- */}}
 ---
@@ -14,8 +15,10 @@
 {{ include "sentry.workload" (dict "root" . "name" "attachments-consumer" "component" .Values.sentry.ingestAttachments "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "ingest-attachments" "--consumer-group" "ingest-consumer" "--healthcheck-file-path" "/tmp/health.txt")) }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "post-process-forwarder-errors" "component" .Values.sentry.postProcessForwarderErrors "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "--no-strict-offset-reset" "post-process-forwarder-errors" "--consumer-group" "post-process-forwarder" "--synchronize-commit-log-topic=snuba-commit-log" "--synchronize-commit-group=snuba-consumers" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- if $legacySubscriptionConsumers }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "subscription-consumer-events" "component" .Values.sentry.subscriptionConsumerEvents "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "events-subscription-results" "--consumer-group" "query-subscription-consumer" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- end }}
 
 {{- /* ---------- ingest consumers (feature-complete) ---------- */}}
 ---
@@ -50,11 +53,19 @@
 {{ include "sentry.workload" (dict "root" . "name" "post-process-forwarder-transactions" "component" .Values.sentry.postProcessForwarderTransactions "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "--no-strict-offset-reset" "post-process-forwarder-transactions" "--consumer-group" "post-process-forwarder" "--synchronize-commit-log-topic=snuba-transactions-commit-log" "--synchronize-commit-group" "transactions_group" "--healthcheck-file-path" "/tmp/health.txt")) }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "post-process-forwarder-issue-platform" "component" .Values.sentry.postProcessForwarderIssuePlatform "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "--no-strict-offset-reset" "post-process-forwarder-issue-platform" "--consumer-group" "post-process-forwarder" "--synchronize-commit-log-topic=snuba-generic-events-commit-log" "--synchronize-commit-group" "generic_events_group" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- if $legacySubscriptionConsumers }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "subscription-consumer-transactions" "component" .Values.sentry.subscriptionConsumerTransactions "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "transactions-subscription-results" "--consumer-group" "query-subscription-consumer" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- end }}
+{{- if $legacySubscriptionConsumers }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "subscription-consumer-metrics" "component" .Values.sentry.subscriptionConsumerMetrics "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "metrics-subscription-results" "--consumer-group" "query-subscription-consumer" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- end }}
+{{- if $legacySubscriptionConsumers }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "subscription-consumer-generic-metrics" "component" .Values.sentry.subscriptionConsumerGenericMetrics "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "generic-metrics-subscription-results" "--consumer-group" "query-subscription-consumer" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- end }}
+{{- if $legacySubscriptionConsumers }}
 ---
 {{ include "sentry.workload" (dict "root" . "name" "subscription-consumer-eap-items" "component" .Values.sentry.subscriptionConsumerEapItems "imageKey" "sentry" "healthcheckFile" true "maxPollIntervalMs" true "command" (list "run" "consumer" "subscription-results-eap-items" "--consumer-group" "subscription-results-eap-items" "--healthcheck-file-path" "/tmp/health.txt")) }}
+{{- end }}

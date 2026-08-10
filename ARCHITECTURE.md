@@ -183,3 +183,7 @@ Because gating is per-component you can build any intermediate set (e.g. errors 
 transactions). Separately, `sentry.selfHostedErrorsOnly` (Sentry's
 `SENTRY_SELF_HOSTED_ERRORS_ONLY`) controls whether the performance/replays/etc.
 product surfaces are shown — set it `false` when you enable those pipelines.
+
+For Sentry 26.7.0 and later, subscription-result processing runs in the Snuba
+`subscriptions-scheduler-executor` consumers; the legacy Sentry subscription
+consumer Deployments are omitted by the chart.

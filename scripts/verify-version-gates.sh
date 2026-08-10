@@ -55,7 +55,7 @@ render() {
 check() {
   local file="$1" label="$2" pattern="$3" expected="$4"
   local count
-  count=$(grep -c -e "$pattern" "$file" 2>/dev/null || echo 0)
+  count=$(grep -c -e "$pattern" "$file" 2>/dev/null || true)
   if [ "$count" -ne "$expected" ]; then
     FAIL "$label: expected $expected, got $count (pattern: $pattern)"
   else
@@ -134,6 +134,7 @@ check   "$FC" "taskbroker: new CLUSTERS__DEFAULT__ADDRESS"            "TASKBROKE
 absent  "$FC" "taskbroker: no old CLUSTER"                            "TASKBROKER_KAFKA_CLUSTER$"
 check   "$FC" "taskbroker: -c in command"                              'command: \["/opt/taskbroker", "-c"' 1
 check   "$EO" "taskbroker (EO): new env var"                          "TASKBROKER_KAFKA_CLUSTERS__DEFAULT__ADDRESS" 1
+check   "$EO" "legacy Sentry events subscription consumer"             "events-subscription-results" 1
 
 # Replacer: has --health-check-file and --max-poll-interval-ms
 consumer_has_flag "$FC" "replacer: --health-check-file"               "^[[:space:]]*- replacer$"
@@ -151,6 +152,29 @@ check "$FC" "SENTRY_KAFKA_MAX_POLL_INTERVAL_MS env var"              "SENTRY_KAF
 
 # subscriptions-scheduler-executor must NOT get the flag
 consumer_lacks_flag "$FC" "subscriptions-scheduler-executor clean"    "^[[:space:]]*- subscriptions-scheduler-executor"
+
+echo ""
+# ----- SUBSCRIPTION CONSUMER LAYOUT (26.7.0+) -----
+INFO "Version-gate checks: appVersion >= 26.7.0"
+render "26.7.2" "subscription-layout"
+FC="$RENDER_DIR/subscription-layout_feature-complete.yaml"
+EO="$RENDER_DIR/subscription-layout_errors-only.yaml"
+
+# Sentry 26.7.0 removed the legacy Sentry subscription-result consumers. The
+# equivalent work is handled by Snuba subscriptions-scheduler-executor pods.
+absent "$FC" "no legacy Sentry events subscription consumer"             "events-subscription-results"
+absent "$FC" "no legacy Sentry transactions subscription consumer"       "transactions-subscription-results"
+absent "$FC" "no legacy Sentry metrics subscription consumer"            "metrics-subscription-results"
+absent "$FC" "no legacy Sentry generic metrics subscription consumer"     "generic-metrics-subscription-results"
+absent "$FC" "no legacy Sentry EAP subscription consumer"                 "subscription-results-eap-items"
+check  "$EO" "Snuba events subscription consumer remains"                "snuba-events-subscriptions-consumers" 1
+check  "$FC" "Snuba transactions subscription consumer remains"           "snuba-transactions-subscriptions-consumers" 1
+check  "$FC" "Snuba metrics subscription consumer remains"                "snuba-metrics-subscriptions-consumers" 1
+check  "$FC" "Snuba generic metrics distributions consumer remains"       "snuba-generic-metrics-distributions-subscriptions-schedulers" 1
+check  "$FC" "Snuba generic metrics sets consumer remains"                "snuba-generic-metrics-sets-subscriptions-schedulers" 1
+check  "$FC" "Snuba generic metrics counters consumer remains"             "snuba-generic-metrics-counters-subscriptions-schedulers" 1
+check  "$FC" "Snuba generic metrics gauges consumer remains"               "snuba-generic-metrics-gauges-subscriptions-schedulers" 1
+check  "$FC" "Snuba EAP subscription consumer remains"                     "snuba-eap-items-subscriptions-consumers" 1
 
 echo ""
 if [ "$fail" -ne 0 ]; then

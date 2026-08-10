@@ -209,6 +209,7 @@ sentry:
   ingestEvents: { enabled: true }
   ingestAttachments: { enabled: true }
   postProcessForwarderErrors: { enabled: true }
+  # Legacy Sentry subscription consumer; used only before Sentry 26.7.0.
   subscriptionConsumerEvents: { enabled: true }
 
   cleanup:
@@ -218,7 +219,8 @@ sentry:
     nodeSelector: {}
 
   # --- transactions / metrics / replays / profiling / monitors / uptime / spans
-  # consumers (off by default; flip enabled:true, see examples/). ---
+  # consumers (off by default; flip enabled:true, see examples/). Legacy Sentry
+  # subscription consumers below are used only before Sentry 26.7.0. ---
   transactions: { enabled: false }
   metrics: { enabled: false }
   genericMetrics: { enabled: false }
