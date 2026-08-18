@@ -7,9 +7,9 @@ description: >-
   Pulumi- and Terraform-friendly.
 type: application
 # Chart version is independent of the Sentry app version.
-version: 1.4.1
+version: 1.4.2
 # All getsentry images default to this tag for cross-service compatibility.
-appVersion: "26.7.2"
+appVersion: "26.8.0"
 keywords:
   - sentry
   - error-tracking
